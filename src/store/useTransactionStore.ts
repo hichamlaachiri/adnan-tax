@@ -1,0 +1,300 @@
+import { create } from 'zustand';
+import { Transaction, AccountId, PipelineStatus, AccountSummary } from '@/types';
+import { isFirebaseConfigured, saveTransactionToFirebase, deleteTransactionFromFirebase, subscribeToTransactions } from '@/lib/firebase';
+import { Language, translations, Translations } from '@/lib/i18n';
+
+export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
+  hicham: {
+    id: 'hicham',
+    name: 'Hicham (Me)',
+    role: 'Primary Account',
+    avatar: 'H',
+    color: 'emerald',
+    badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    workflow: 'KAST → Binance → CIH',
+  },
+  zouhir: {
+    id: 'zouhir',
+    name: 'Zouhir',
+    role: 'Managed Profile',
+    avatar: 'Z',
+    color: 'indigo',
+    badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    workflow: 'KAST → Binance → CIH',
+  },
+  adnan: {
+    id: 'adnan',
+    name: 'Adnan',
+    role: 'Partner Profile',
+    avatar: 'A',
+    color: 'amber',
+    badgeBg: 'bg-amber-50 text-amber-700 border-amber-200',
+    workflow: 'KAST → Direct Transfer to Hicham',
+  }
+};
+
+const STORAGE_KEY = 'taxfree_flow_transactions_live';
+const LANG_STORAGE_KEY = 'taxfree_flow_lang';
+
+interface TransactionStore {
+  transactions: Transaction[];
+  selectedAccount: AccountId;
+  language: Language;
+  isLoaded: boolean;
+  
+  // Modals
+  isQuickAddOpen: boolean;
+  quickAddStage: PipelineStatus;
+  moveModalTx: { tx: Transaction; targetStage: PipelineStatus } | null;
+  
+  // Actions
+  setSelectedAccount: (account: AccountId) => void;
+  setLanguage: (lang: Language) => void;
+  t: () => Translations;
+  
+  openQuickAdd: (stage?: PipelineStatus) => void;
+  closeQuickAdd: () => void;
+  
+  openMoveModal: (tx: Transaction, targetStage: PipelineStatus) => void;
+  closeMoveModal: () => void;
+  
+  setTransactions: (txs: Transaction[]) => void;
+  initStore: () => () => void;
+  
+  addTransaction: (data: {
+    account: 'hicham' | 'zouhir' | 'adnan';
+    kastAmount: number;
+    source?: string;
+    reference?: string;
+    notes?: string;
+    date?: string;
+    stage?: PipelineStatus;
+  }) => Promise<void>;
+  
+  moveTransactionStage: (
+    id: string, 
+    targetStage: PipelineStatus, 
+    extraData?: {
+      binanceAmount?: number;
+      binanceFee?: number;
+      cihAmount?: number;
+      exchangeRate?: number;
+      notes?: string;
+    }
+  ) => Promise<void>;
+  
+  deleteTransaction: (id: string) => Promise<void>;
+  clearAll: () => void;
+  
+  getMetrics: () => {
+    totalInKastUSD: number;
+    totalInBinanceUSD: number;
+    totalSettledCIHMAD: number;
+    count: number;
+  };
+  getFilteredTransactions: () => Transaction[];
+}
+
+const saveStorage = (txs: Transaction[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(txs));
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+export const useTransactionStore = create<TransactionStore>((set, get) => ({
+  transactions: [],
+  selectedAccount: 'all',
+  language: 'en',
+  isLoaded: false,
+  
+  isQuickAddOpen: false,
+  quickAddStage: 'in_kast',
+  moveModalTx: null,
+
+  setSelectedAccount: (acc) => set({ selectedAccount: acc }),
+  
+  setLanguage: (lang) => {
+    set({ language: lang });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+      document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+      document.documentElement.lang = lang;
+    }
+  },
+
+  t: () => translations[get().language] || translations.en,
+
+  openQuickAdd: (stage = 'in_kast') => set({ isQuickAddOpen: true, quickAddStage: stage }),
+  closeQuickAdd: () => set({ isQuickAddOpen: false }),
+
+  openMoveModal: (tx, targetStage) => set({ moveModalTx: { tx, targetStage } }),
+  closeMoveModal: () => set({ moveModalTx: null }),
+
+  setTransactions: (txs) => {
+    set({ transactions: txs, isLoaded: true });
+    saveStorage(txs);
+  },
+
+  initStore: () => {
+    // 0. Load saved language preference
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem(LANG_STORAGE_KEY) as Language;
+      if (savedLang && (savedLang === 'en' || savedLang === 'es' || savedLang === 'ar')) {
+        set({ language: savedLang });
+        document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
+        document.documentElement.lang = savedLang;
+      }
+    }
+
+    // 1. Try Firebase real-time subscription first
+    if (isFirebaseConfigured) {
+      const unsubscribe = subscribeToTransactions((txs) => {
+        set({ transactions: txs, isLoaded: true });
+        saveStorage(txs);
+      });
+      if (unsubscribe) return unsubscribe;
+    }
+
+    // 2. Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            set({ transactions: parsed, isLoaded: true });
+            return () => {};
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    set({ transactions: [], isLoaded: true });
+    return () => {};
+  },
+
+  addTransaction: async (data) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newTx: Transaction = {
+      id: 'tx-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+      account: data.account,
+      date: data.date || today,
+      source: data.source || 'Global Blue Refund',
+      reference: data.reference || `GB-${Math.floor(10000 + Math.random() * 90000)}`,
+      kastAmount: data.kastAmount,
+      status: data.stage || 'in_kast',
+      notes: data.notes || '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    if (data.account === 'adnan' && data.stage === 'transferred_to_hicham') {
+      newTx.transferredToHicham = true;
+    }
+
+    const updated = [newTx, ...get().transactions];
+    set({ transactions: updated, isQuickAddOpen: false });
+    saveStorage(updated);
+
+    if (isFirebaseConfigured) {
+      await saveTransactionToFirebase(newTx);
+    }
+  },
+
+  moveTransactionStage: async (id, targetStage, extraData = {}) => {
+    const tx = get().transactions.find(t => t.id === id);
+    if (!tx) return;
+
+    const updated = get().transactions.map(t => {
+      if (t.id === id) {
+        const merged: Transaction = {
+          ...t,
+          status: targetStage,
+          updatedAt: Date.now(),
+        };
+
+        if (targetStage === 'in_binance') {
+          const fee = extraData.binanceFee ?? Number((t.kastAmount * 0.01).toFixed(2));
+          merged.binanceAmount = extraData.binanceAmount ?? Number((t.kastAmount - fee).toFixed(2));
+          merged.binanceFee = fee;
+        }
+
+        if (targetStage === 'settled_cih') {
+          const baseUSD = t.binanceAmount || t.kastAmount;
+          const rate = extraData.exchangeRate ?? 9.90;
+          merged.exchangeRate = rate;
+          merged.cihAmount = extraData.cihAmount ?? Number((baseUSD * rate).toFixed(2));
+        }
+
+        if (targetStage === 'transferred_to_hicham') {
+          merged.transferredToHicham = true;
+        }
+
+        if (extraData.notes) {
+          merged.notes = extraData.notes;
+        }
+
+        return merged;
+      }
+      return t;
+    });
+
+    set({ transactions: updated, moveModalTx: null });
+    saveStorage(updated);
+
+    const changed = updated.find(t => t.id === id);
+    if (changed && isFirebaseConfigured) {
+      await saveTransactionToFirebase(changed);
+    }
+  },
+
+  deleteTransaction: async (id) => {
+    const updated = get().transactions.filter(t => t.id !== id);
+    set({ transactions: updated });
+    saveStorage(updated);
+
+    if (isFirebaseConfigured) {
+      await deleteTransactionFromFirebase(id);
+    }
+  },
+
+  clearAll: () => {
+    set({ transactions: [] });
+    saveStorage([]);
+  },
+
+  getFilteredTransactions: () => {
+    const { transactions, selectedAccount } = get();
+    if (selectedAccount === 'all') return transactions;
+    return transactions.filter(t => t.account === selectedAccount);
+  },
+
+  getMetrics: () => {
+    const list = get().getFilteredTransactions();
+    let totalInKastUSD = 0;
+    let totalInBinanceUSD = 0;
+    let totalSettledCIHMAD = 0;
+
+    list.forEach(tx => {
+      if (tx.status === 'in_kast') {
+        totalInKastUSD += tx.kastAmount || 0;
+      } else if (tx.status === 'in_binance') {
+        totalInBinanceUSD += (tx.binanceAmount || tx.kastAmount || 0);
+      } else if (tx.status === 'settled_cih' && tx.cihAmount) {
+        totalSettledCIHMAD += tx.cihAmount;
+      }
+    });
+
+    return {
+      totalInKastUSD,
+      totalInBinanceUSD,
+      totalSettledCIHMAD,
+      count: list.length
+    };
+  }
+}));
