@@ -6,7 +6,7 @@ import { formatUSD, formatMAD, formatEUR } from '@/lib/utils';
 import { X, Coins, Building2, UserCheck, Euro } from 'lucide-react';
 
 export const MoveStageModal: React.FC = () => {
-  const { moveModalTx, closeMoveModal, moveTransactionStage, t } = useTransactionStore();
+  const { moveModalTx, closeMoveModal, moveTransactionStage, lastEurRate, t } = useTransactionStore();
   const dict = t();
 
   // Step 2: Binance
@@ -16,7 +16,7 @@ export const MoveStageModal: React.FC = () => {
   // Step 3: CIH
   const [exchangeRate, setExchangeRate] = useState<string>('9.90');
   const [cihAmount, setCihAmount] = useState<string>('');
-  const [eurRate, setEurRate] = useState<string>('10.85');
+  const [eurRate, setEurRate] = useState<string>(lastEurRate?.toString() || '10.85');
   const [eurAmount, setEurAmount] = useState<string>('');
 
   // Step 4: Final Payout
@@ -37,7 +37,7 @@ export const MoveStageModal: React.FC = () => {
       } else if (targetStage === 'settled_cih') {
         const netUSD = tx.binanceAmount || baseUSD;
         const rate = tx.exchangeRate || 9.90;
-        const eRate = tx.eurRate || 10.85;
+        const eRate = tx.eurRate || lastEurRate || 10.85;
         const cAmt = tx.cihAmount ? tx.cihAmount : Number((netUSD * rate).toFixed(2));
         setExchangeRate(rate.toString());
         setCihAmount(cAmt.toString());
@@ -51,7 +51,7 @@ export const MoveStageModal: React.FC = () => {
         setPayoutMethod(tx.payoutMethod || 'Bank Transfer / Cash');
       }
     }
-  }, [moveModalTx]);
+  }, [moveModalTx, lastEurRate]);
 
   if (!moveModalTx) return null;
 

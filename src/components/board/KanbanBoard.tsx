@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTransactionStore, PROFILES } from '@/store/useTransactionStore';
 import { Transaction, PipelineStatus } from '@/types';
 import { formatUSD, formatMAD, formatEUR, formatDate } from '@/lib/utils';
@@ -18,20 +18,25 @@ import {
 interface InlineEurRateProps {
   txId: string;
   madAmount: number;
-  currentRate?: number;
+  currentRate: number;
   onUpdate: (id: string, rate: number) => void;
 }
 
 const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
   txId,
   madAmount,
-  currentRate = 10.85,
+  currentRate,
   onUpdate,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [rateVal, setRateVal] = useState(currentRate.toString());
 
-  const activeRate = parseFloat(rateVal) || currentRate || 10.85;
+  // Keep internal input in sync if currentRate changes
+  useEffect(() => {
+    setRateVal(currentRate.toString());
+  }, [currentRate]);
+
+  const activeRate = parseFloat(rateVal) || currentRate;
   const eurCalculated = madAmount > 0 && activeRate > 0 ? Number((madAmount / activeRate).toFixed(2)) : 0;
 
   const handleCommit = () => {
@@ -62,7 +67,6 @@ const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
           onClick={(e) => e.stopPropagation()} 
           className="flex items-center gap-1 bg-blue-50 dark:bg-blue-950/80 px-1.5 py-0.5 rounded-lg border border-blue-400 dark:border-blue-600 shadow-xs"
         >
-          <span className="text-[10px] text-blue-500 font-bold">@</span>
           <input
             type="number"
             step="0.01"
@@ -74,7 +78,7 @@ const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
             placeholder="10.85"
             className="w-13 text-[11px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded px-1 py-0.2 focus:outline-none focus:ring-1 focus:ring-blue-500 text-center"
           />
-          <span className="text-[9px] text-blue-500 font-semibold">EUR</span>
+          <span className="text-[9px] text-blue-500 font-semibold">MAD/EUR</span>
         </div>
       ) : (
         <button
@@ -83,10 +87,10 @@ const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
             e.stopPropagation();
             setIsEditing(true);
           }}
-          title="Click to change EUR exchange rate"
+          title="Click to edit EUR exchange rate"
           className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 px-1.5 py-0.5 rounded-md border border-blue-200/80 dark:border-blue-800 transition-all cursor-pointer group/rate active:scale-95"
         >
-          <span>@ {currentRate} MAD/EUR</span>
+          <span>{currentRate} MAD/EUR</span>
           <Pencil className="w-2.5 h-2.5 opacity-60 group-hover/rate:opacity-100" />
         </button>
       )}
@@ -101,6 +105,7 @@ export const KanbanBoard: React.FC = () => {
     openMoveModal,
     deleteTransaction,
     updateEurRate,
+    lastEurRate,
     t
   } = useTransactionStore();
 
@@ -260,6 +265,7 @@ export const KanbanBoard: React.FC = () => {
                 colTransactions.map((tx) => {
                   const profile = PROFILES[tx.account];
                   const fee = tx.binanceFee ?? (tx.binanceAmount ? Number((tx.kastAmount - tx.binanceAmount).toFixed(2)) : 0);
+                  const effectiveRate = tx.eurRate || lastEurRate || 10.85;
 
                   return (
                     <div
@@ -335,14 +341,14 @@ export const KanbanBoard: React.FC = () => {
                           <div className="mt-1">
                             {tx.exchangeRate && (
                               <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 text-right">
-                                @ {tx.exchangeRate} {dict.ratePerUSD}
+                                {tx.exchangeRate} {dict.ratePerUSD}
                               </div>
                             )}
 
                             <InlineEurRateEditor
                               txId={tx.id}
                               madAmount={tx.cihAmount || 0}
-                              currentRate={tx.eurRate || 10.85}
+                              currentRate={effectiveRate}
                               onUpdate={updateEurRate}
                             />
                           </div>
@@ -353,7 +359,7 @@ export const KanbanBoard: React.FC = () => {
                           <InlineEurRateEditor
                             txId={tx.id}
                             madAmount={tx.payoutAmount || tx.cihAmount || 0}
-                            currentRate={tx.eurRate || 10.85}
+                            currentRate={effectiveRate}
                             onUpdate={updateEurRate}
                           />
                         )}

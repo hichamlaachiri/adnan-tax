@@ -35,11 +35,13 @@ export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
 
 const STORAGE_KEY = 'taxfree_flow_transactions_live';
 const LANG_STORAGE_KEY = 'taxfree_flow_lang';
+const EUR_RATE_STORAGE_KEY = 'taxfree_last_eur_rate';
 
 interface TransactionStore {
   transactions: Transaction[];
   selectedAccount: AccountId;
   language: Language;
+  lastEurRate: number;
   isLoaded: boolean;
   
   // Modals
@@ -51,6 +53,7 @@ interface TransactionStore {
   // Actions
   setSelectedAccount: (account: AccountId) => void;
   setLanguage: (lang: Language) => void;
+  setLastEurRate: (rate: number) => void;
   t: () => Translations;
   
   openQuickAdd: (stage?: PipelineStatus) => void;
@@ -122,6 +125,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   transactions: [],
   selectedAccount: 'all',
   language: 'en',
+  lastEurRate: 10.85,
   isLoaded: false,
   
   isQuickAddOpen: false,
@@ -137,6 +141,15 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       localStorage.setItem(LANG_STORAGE_KEY, lang);
       document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
       document.documentElement.lang = lang;
+    }
+  },
+
+  setLastEurRate: (rate) => {
+    if (!isNaN(rate) && rate > 0) {
+      set({ lastEurRate: rate });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(EUR_RATE_STORAGE_KEY, rate.toString());
+      }
     }
   },
 
@@ -162,6 +175,14 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         set({ language: savedLang });
         document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
         document.documentElement.lang = savedLang;
+      }
+
+      const savedRate = localStorage.getItem(EUR_RATE_STORAGE_KEY);
+      if (savedRate) {
+        const parsedRate = parseFloat(savedRate);
+        if (!isNaN(parsedRate) && parsedRate > 0) {
+          set({ lastEurRate: parsedRate });
+        }
       }
     }
 
@@ -203,6 +224,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       kastAmount: data.kastAmount,
       status: data.stage || 'in_kast',
       notes: data.notes || '',
+      eurRate: get().lastEurRate,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -223,6 +245,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   moveTransactionStage: async (id, targetStage, extraData = {}) => {
     const tx = get().transactions.find(t => t.id === id);
     if (!tx) return;
+
+    const currentLastRate = get().lastEurRate;
 
     const updated = get().transactions.map(t => {
       if (t.id === id) {
@@ -246,7 +270,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           merged.cihAmount = cihMAD;
           
           // Euro manual conversion
-          const eurR = extraData.eurRate || t.eurRate || 10.85;
+          const eurR = extraData.eurRate || t.eurRate || currentLastRate || 10.85;
           merged.eurRate = eurR;
           merged.eurAmount = extraData.eurAmount ?? Number((cihMAD / eurR).toFixed(2));
         }
@@ -258,7 +282,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
           merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
           
-          const eurR = extraData.eurRate || t.eurRate || 10.85;
+          const eurR = extraData.eurRate || t.eurRate || currentLastRate || 10.85;
           merged.eurRate = eurR;
           merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
         }
@@ -275,6 +299,10 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       }
       return t;
     });
+
+    if (extraData.eurRate && !isNaN(extraData.eurRate) && extraData.eurRate > 0) {
+      get().setLastEurRate(extraData.eurRate);
+    }
 
     set({ transactions: updated, moveModalTx: null });
     saveStorage(updated);
@@ -298,6 +326,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   updateEurRate: async (id, newRate) => {
     const tx = get().transactions.find(t => t.id === id);
     if (!tx || isNaN(newRate) || newRate <= 0) return;
+
+    // Remember as the last used rate globally
+    get().setLastEurRate(newRate);
 
     const madAmt = tx.payoutAmount || tx.cihAmount || 0;
     const newEurAmt = madAmt > 0 ? Number((madAmt / newRate).toFixed(2)) : undefined;
@@ -336,6 +367,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
   getMetrics: () => {
     const list = get().getFilteredTransactions();
+    const fallbackRate = get().lastEurRate || 10.85;
     let totalInKastUSD = 0;
     let totalInBinanceUSD = 0;
     let totalSettledCIHMAD = 0;
@@ -354,11 +386,13 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         totalInBinanceUSD += (tx.binanceAmount || tx.kastAmount || 0);
       } else if (tx.status === 'settled_cih') {
         totalSettledCIHMAD += tx.cihAmount || 0;
-        totalSettledEUR += (tx.eurAmount || (tx.cihAmount ? tx.cihAmount / (tx.eurRate || 10.85) : 0));
+        const rate = tx.eurRate || fallbackRate;
+        totalSettledEUR += (tx.eurAmount || (tx.cihAmount ? tx.cihAmount / rate : 0));
       } else if (tx.status === 'final_payout') {
         const pMAD = (tx.payoutAmount || tx.cihAmount || 0);
         totalFinalPayoutMAD += pMAD;
-        totalFinalPayoutEUR += (tx.eurAmount || (pMAD / (tx.eurRate || 10.85)));
+        const rate = tx.eurRate || fallbackRate;
+        totalFinalPayoutEUR += (tx.eurAmount || (pMAD / rate));
       }
     });
 
