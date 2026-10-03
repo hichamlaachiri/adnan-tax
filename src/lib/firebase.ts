@@ -3,18 +3,14 @@ import {
   getFirestore, 
   collection, 
   getDocs, 
-  addDoc, 
-  updateDoc, 
+  setDoc, 
   deleteDoc, 
   doc, 
   onSnapshot, 
-  Firestore,
-  query,
-  orderBy
+  Firestore 
 } from 'firebase/firestore';
 import { Transaction } from '@/types';
 
-// Environment-based config with fallback placeholders
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
@@ -34,53 +30,82 @@ export const isFirebaseConfigured = Boolean(
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 
-if (isFirebaseConfigured) {
+if (typeof window !== 'undefined' || isFirebaseConfigured) {
   try {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     db = getFirestore(app);
   } catch (err) {
-    console.warn("Firebase initialization error (using local Zustand store):", err);
+    console.warn("Firebase initialization error:", err);
   }
 }
 
 export { app, db };
 
-// Firebase Firestore Helpers
 const TRANSACTIONS_COLLECTION = 'transactions';
 
-export async function fetchTransactionsFromFirebase(): Promise<Transaction[]> {
-  if (!db) return [];
+// Real-time synchronization for all devices (Mobile, PC, etc.)
+export function subscribeToTransactions(onUpdate: (transactions: Transaction[]) => void): (() => void) | null {
+  if (!db) return null;
   try {
-    const q = query(collection(db, TRANSACTIONS_COLLECTION), orderBy('date', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Transaction[];
+    const colRef = collection(db, TRANSACTIONS_COLLECTION);
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const txs = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          account: data.account || 'hicham',
+          date: data.date || new Date().toISOString().split('T')[0],
+          source: data.source || 'Global Blue Refund',
+          reference: data.reference || '',
+          kastAmount: Number(data.kastAmount || 0),
+          binanceAmount: data.binanceAmount !== null && data.binanceAmount !== undefined ? Number(data.binanceAmount) : null,
+          binanceFee: data.binanceFee !== null && data.binanceFee !== undefined ? Number(data.binanceFee) : null,
+          binanceTxId: data.binanceTxId || '',
+          cihAmount: data.cihAmount !== null && data.cihAmount !== undefined ? Number(data.cihAmount) : null,
+          exchangeRate: data.exchangeRate !== null && data.exchangeRate !== undefined ? Number(data.exchangeRate) : null,
+          cihTxId: data.cihTxId || '',
+          recipient: data.recipient || '',
+          payoutAmount: data.payoutAmount !== null && data.payoutAmount !== undefined ? Number(data.payoutAmount) : null,
+          payoutDate: data.payoutDate || '',
+          payoutMethod: data.payoutMethod || '',
+          transferredToHicham: Boolean(data.transferredToHicham),
+          status: data.status || 'in_kast',
+          notes: data.notes || '',
+          createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
+          updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now(),
+        } as Transaction;
+      });
+
+      // Sort newest first by date & timestamp
+      txs.sort((a, b) => {
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+
+      onUpdate(txs);
+    }, (error) => {
+      console.error("Firestore real-time subscription error:", error);
+    });
+
+    return unsubscribe;
   } catch (error) {
-    console.error("Error fetching transactions from Firestore:", error);
-    return [];
+    console.error("Error setting up Firestore subscription:", error);
+    return null;
   }
 }
 
-export async function saveTransactionToFirebase(tx: Omit<Transaction, 'id'> & { id?: string }): Promise<string | null> {
+export async function saveTransactionToFirebase(tx: Transaction): Promise<string | null> {
   if (!db) return null;
   try {
-    const { id, ...data } = tx;
-    if (id) {
-      await updateDoc(doc(db, TRANSACTIONS_COLLECTION, id), {
-        ...data,
-        updatedAt: Date.now()
-      });
-      return id;
-    } else {
-      const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
-        ...data,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      return docRef.id;
-    }
+    const docId = tx.id;
+    const docRef = doc(db, TRANSACTIONS_COLLECTION, docId);
+    await setDoc(docRef, {
+      ...tx,
+      updatedAt: Date.now(),
+      createdAt: tx.createdAt || Date.now()
+    }, { merge: true });
+    return docId;
   } catch (error) {
     console.error("Error saving transaction to Firestore:", error);
     return null;
@@ -95,25 +120,5 @@ export async function deleteTransactionFromFirebase(id: string): Promise<boolean
   } catch (error) {
     console.error("Error deleting transaction from Firestore:", error);
     return false;
-  }
-}
-
-export function subscribeToTransactions(onUpdate: (transactions: Transaction[]) => void): (() => void) | null {
-  if (!db) return null;
-  try {
-    const q = query(collection(db, TRANSACTIONS_COLLECTION), orderBy('date', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const txs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Transaction[];
-      onUpdate(txs);
-    }, (error) => {
-      console.error("Firestore subscription error:", error);
-    });
-    return unsubscribe;
-  } catch (error) {
-    console.error("Error setting up Firestore subscription:", error);
-    return null;
   }
 }
