@@ -93,6 +93,7 @@ interface TransactionStore {
   ) => Promise<void>;
   
   deleteTransaction: (id: string) => Promise<void>;
+  updateEurRate: (id: string, newRate: number) => Promise<void>;
   clearAll: () => void;
   
   getMetrics: () => {
@@ -291,6 +292,34 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
     if (isFirebaseConfigured) {
       await deleteTransactionFromFirebase(id);
+    }
+  },
+
+  updateEurRate: async (id, newRate) => {
+    const tx = get().transactions.find(t => t.id === id);
+    if (!tx || isNaN(newRate) || newRate <= 0) return;
+
+    const madAmt = tx.payoutAmount || tx.cihAmount || 0;
+    const newEurAmt = madAmt > 0 ? Number((madAmt / newRate).toFixed(2)) : undefined;
+
+    const updated = get().transactions.map(t => {
+      if (t.id === id) {
+        return {
+          ...t,
+          eurRate: newRate,
+          eurAmount: newEurAmt,
+          updatedAt: Date.now(),
+        };
+      }
+      return t;
+    });
+
+    set({ transactions: updated });
+    saveStorage(updated);
+
+    const changed = updated.find(t => t.id === id);
+    if (changed && isFirebaseConfigured) {
+      await saveTransactionToFirebase(changed);
     }
   },
 

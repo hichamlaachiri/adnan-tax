@@ -9,11 +9,90 @@ import {
   Wallet, 
   Coins, 
   Building2, 
-  UserCheck,
-  ArrowRight, 
+  UserCheck, 
   Trash2, 
-  GripVertical
+  GripVertical,
+  Pencil
 } from 'lucide-react';
+
+interface InlineEurRateProps {
+  txId: string;
+  madAmount: number;
+  currentRate?: number;
+  onUpdate: (id: string, rate: number) => void;
+}
+
+const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
+  txId,
+  madAmount,
+  currentRate = 10.85,
+  onUpdate,
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [rateVal, setRateVal] = useState(currentRate.toString());
+
+  const activeRate = parseFloat(rateVal) || currentRate || 10.85;
+  const eurCalculated = madAmount > 0 && activeRate > 0 ? Number((madAmount / activeRate).toFixed(2)) : 0;
+
+  const handleCommit = () => {
+    setIsEditing(false);
+    const num = parseFloat(rateVal);
+    if (!isNaN(num) && num > 0 && num !== currentRate) {
+      onUpdate(txId, num);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleCommit();
+    } else if (e.key === 'Escape') {
+      setRateVal(currentRate.toString());
+      setIsEditing(false);
+    }
+  };
+
+  return (
+    <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-1">
+      <div className="text-[11px] font-extrabold text-blue-600 dark:text-blue-400 font-mono tracking-tight">
+        ≈ {formatEUR(eurCalculated)}
+      </div>
+
+      {isEditing ? (
+        <div 
+          onClick={(e) => e.stopPropagation()} 
+          className="flex items-center gap-1 bg-blue-50 dark:bg-blue-950/80 px-1.5 py-0.5 rounded-lg border border-blue-400 dark:border-blue-600 shadow-xs"
+        >
+          <span className="text-[10px] text-blue-500 font-bold">@</span>
+          <input
+            type="number"
+            step="0.01"
+            autoFocus
+            value={rateVal}
+            onChange={(e) => setRateVal(e.target.value)}
+            onBlur={handleCommit}
+            onKeyDown={handleKeyDown}
+            placeholder="10.85"
+            className="w-13 text-[11px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded px-1 py-0.2 focus:outline-none focus:ring-1 focus:ring-blue-500 text-center"
+          />
+          <span className="text-[9px] text-blue-500 font-semibold">EUR</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsEditing(true);
+          }}
+          title="Click to change EUR exchange rate"
+          className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 px-1.5 py-0.5 rounded-md border border-blue-200/80 dark:border-blue-800 transition-all cursor-pointer group/rate active:scale-95"
+        >
+          <span>@ {currentRate} MAD/EUR</span>
+          <Pencil className="w-2.5 h-2.5 opacity-60 group-hover/rate:opacity-100" />
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const KanbanBoard: React.FC = () => {
   const { 
@@ -21,6 +100,7 @@ export const KanbanBoard: React.FC = () => {
     openQuickAdd, 
     openMoveModal,
     deleteTransaction,
+    updateEurRate,
     t
   } = useTransactionStore();
 
@@ -153,7 +233,7 @@ export const KanbanBoard: React.FC = () => {
               {col.canAdd && (
                 <button
                   onClick={() => openQuickAdd('in_kast')}
-                  className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
                   title={dict.addBtn}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -170,7 +250,7 @@ export const KanbanBoard: React.FC = () => {
                   {col.canAdd && (
                     <button
                       onClick={() => openQuickAdd('in_kast')}
-                      className="text-blue-600 font-semibold hover:underline mt-1"
+                      className="text-blue-600 font-semibold hover:underline mt-1 cursor-pointer"
                     >
                       {dict.addBtn}
                     </button>
@@ -180,7 +260,6 @@ export const KanbanBoard: React.FC = () => {
                 colTransactions.map((tx) => {
                   const profile = PROFILES[tx.account];
                   const fee = tx.binanceFee ?? (tx.binanceAmount ? Number((tx.kastAmount - tx.binanceAmount).toFixed(2)) : 0);
-                  const effectiveEur = tx.eurAmount || (tx.cihAmount && tx.eurRate ? Number((tx.cihAmount / tx.eurRate).toFixed(2)) : null);
 
                   return (
                     <div
@@ -220,56 +299,64 @@ export const KanbanBoard: React.FC = () => {
                       </div>
 
                       {/* Main Amount for this Column */}
-                      <div className="mt-2 p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
-                        <span className="text-[10px] text-slate-400 font-medium">
-                          {col.id === 'in_kast' && 'KAST USD:'}
-                          {col.id === 'in_binance' && 'Binance Net:'}
-                          {col.id === 'settled_cih' && 'CIH Settled:'}
-                          {col.id === 'final_payout' && 'Paid Out:'}
-                        </span>
-                        <div className="text-right">
-                          <span className="text-sm font-extrabold font-mono text-slate-900 dark:text-white">
-                            {col.id === 'in_kast' && formatUSD(tx.kastAmount)}
-                            {col.id === 'in_binance' && formatUSD(tx.binanceAmount || tx.kastAmount)}
-                            {col.id === 'settled_cih' && formatMAD(tx.cihAmount || 0)}
-                            {col.id === 'final_payout' && formatMAD(tx.payoutAmount || tx.cihAmount || 0)}
+                      <div className="mt-2 p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-[10px] text-slate-400 font-semibold">
+                            {col.id === 'in_kast' && 'KAST USD:'}
+                            {col.id === 'in_binance' && 'Binance Net:'}
+                            {col.id === 'settled_cih' && 'CIH Settled:'}
+                            {col.id === 'final_payout' && 'Paid Out:'}
                           </span>
 
-                          {col.id === 'in_binance' && fee > 0 && (
-                            <div className="text-[10px] text-rose-500">
-                              {dict.feeDeducted} -${fee.toFixed(2)}
-                            </div>
-                          )}
+                          <div className="text-right">
+                            <span className="text-sm font-extrabold font-mono text-slate-900 dark:text-white">
+                              {col.id === 'in_kast' && formatUSD(tx.kastAmount)}
+                              {col.id === 'in_binance' && formatUSD(tx.binanceAmount || tx.kastAmount)}
+                              {col.id === 'settled_cih' && formatMAD(tx.cihAmount || 0)}
+                              {col.id === 'final_payout' && formatMAD(tx.payoutAmount || tx.cihAmount || 0)}
+                            </span>
 
-                          {/* CIH Bank Euro Value + USD Rate */}
-                          {col.id === 'settled_cih' && (
-                            <div className="space-y-0.5">
-                              {effectiveEur && (
-                                <div className="text-[11px] font-bold text-blue-600 dark:text-blue-400 font-mono">
-                                  ≈ {formatEUR(effectiveEur)} {tx.eurRate ? `(@ ${tx.eurRate})` : ''}
-                                </div>
-                              )}
-                              {tx.exchangeRate && (
-                                <div className="text-[10px] text-emerald-600">
-                                  @ {tx.exchangeRate} {dict.ratePerUSD}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                            {col.id === 'in_binance' && fee > 0 && (
+                              <div className="text-[10px] text-rose-500 font-semibold">
+                                {dict.feeDeducted} -${fee.toFixed(2)}
+                              </div>
+                            )}
 
-                          {/* Final Payout Euro Value */}
-                          {col.id === 'final_payout' && effectiveEur && (
-                            <div className="text-[11px] font-bold text-purple-600 dark:text-purple-400 font-mono">
-                              ≈ {formatEUR(effectiveEur)}
-                            </div>
-                          )}
-
-                          {col.id === 'final_payout' && tx.payoutMethod && (
-                            <div className="text-[10px] text-slate-400">
-                              {tx.payoutMethod}
-                            </div>
-                          )}
+                            {col.id === 'final_payout' && tx.payoutMethod && (
+                              <div className="text-[10px] text-slate-400 font-medium">
+                                {tx.payoutMethod}
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {/* CIH Column: Exchange Rate + Interactive EUR section directly UNDER MAD/USD */}
+                        {col.id === 'settled_cih' && (
+                          <div className="mt-1">
+                            {tx.exchangeRate && (
+                              <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 text-right">
+                                @ {tx.exchangeRate} {dict.ratePerUSD}
+                              </div>
+                            )}
+
+                            <InlineEurRateEditor
+                              txId={tx.id}
+                              madAmount={tx.cihAmount || 0}
+                              currentRate={tx.eurRate || 10.85}
+                              onUpdate={updateEurRate}
+                            />
+                          </div>
+                        )}
+
+                        {/* Final Payout Column: Also display Euro equivalent and editable EUR rate under the amount */}
+                        {col.id === 'final_payout' && (
+                          <InlineEurRateEditor
+                            txId={tx.id}
+                            madAmount={tx.payoutAmount || tx.cihAmount || 0}
+                            currentRate={tx.eurRate || 10.85}
+                            onUpdate={updateEurRate}
+                          />
+                        )}
                       </div>
 
                       {/* Notes if any */}
@@ -289,7 +376,7 @@ export const KanbanBoard: React.FC = () => {
                           {col.id === 'in_kast' && (
                             <button
                               onClick={() => openMoveModal(tx, 'in_binance')}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-md shadow-xs active:scale-95 transition-all flex items-center gap-0.5"
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-md shadow-xs active:scale-95 transition-all cursor-pointer"
                             >
                               <span>{dict.toBinance}</span>
                             </button>
@@ -298,7 +385,7 @@ export const KanbanBoard: React.FC = () => {
                           {col.id === 'in_binance' && (
                             <button
                               onClick={() => openMoveModal(tx, 'settled_cih')}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md shadow-xs active:scale-95 transition-all flex items-center gap-0.5"
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md shadow-xs active:scale-95 transition-all cursor-pointer"
                             >
                               <span>{dict.toCIH}</span>
                             </button>
@@ -307,7 +394,7 @@ export const KanbanBoard: React.FC = () => {
                           {col.id === 'settled_cih' && (
                             <button
                               onClick={() => openMoveModal(tx, 'final_payout')}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-md shadow-xs active:scale-95 transition-all flex items-center gap-0.5"
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-md shadow-xs active:scale-95 transition-all cursor-pointer"
                             >
                               <span>{dict.toPayout}</span>
                             </button>
@@ -319,7 +406,7 @@ export const KanbanBoard: React.FC = () => {
                                 deleteTransaction(tx.id);
                               }
                             }}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded"
+                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded cursor-pointer"
                             title="Delete"
                           >
                             <Trash2 className="w-3 h-3" />
