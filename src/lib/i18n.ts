@@ -23,6 +23,8 @@ export interface Translations {
   toHicham: string;
   feeDeducted: string;
   ratePerUSD: string;
+  eurRateLabel: string;
+  eurEquivalent: string;
   deleteConfirm: string;
   addToKastTitle: string;
   addToKastSubtitle: string;
@@ -81,6 +83,8 @@ export const translations: Record<Language, Translations> = {
     toHicham: '→ Hicham',
     feeDeducted: 'Fee:',
     ratePerUSD: 'MAD/USD',
+    eurRateLabel: 'EUR Manual Rate (MAD per 1 EUR)',
+    eurEquivalent: 'Euro Equivalent (€ EUR)',
     deleteConfirm: 'Delete this transaction?',
     addToKastTitle: 'Add to KAST',
     addToKastSubtitle: 'Incoming tax free USD refund',
@@ -137,6 +141,8 @@ export const translations: Record<Language, Translations> = {
     toHicham: '→ Hicham',
     feeDeducted: 'Comisión:',
     ratePerUSD: 'MAD/USD',
+    eurRateLabel: 'Tipo de cambio EUR (MAD por 1 EUR)',
+    eurEquivalent: 'Equivalente en Euros (€ EUR)',
     deleteConfirm: '¿Eliminar esta transacción?',
     addToKastTitle: 'Añadir a KAST',
     addToKastSubtitle: 'Reembolso Tax Free entrante en USD',
@@ -193,6 +199,8 @@ export const translations: Record<Language, Translations> = {
     toHicham: '← هشام',
     feeDeducted: 'الرسوم:',
     ratePerUSD: 'درهم/دولار',
+    eurRateLabel: 'سعر صرف اليورو (درهم لكل 1 يورو)',
+    eurEquivalent: 'المقابل باليورو (€ EUR)',
     deleteConfirm: 'هل أنت متأكد من حذف هذه المعاملة؟',
     addToKastTitle: 'إضافة إلى KAST',
     addToKastSubtitle: 'استرداد ضريبي وارد بالدولار (USD)',

@@ -15,6 +15,16 @@ export function formatUSD(amount: number | null | undefined): string {
   }).format(amount);
 }
 
+export function formatEUR(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) return '—';
+  return new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatMAD(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return '—';
   return new Intl.NumberFormat('fr-MA', {

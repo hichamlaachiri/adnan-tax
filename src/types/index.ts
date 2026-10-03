@@ -27,12 +27,16 @@ export interface Transaction {
   cihAmount?: number | null; // MAD (Moroccan Dirham)
   exchangeRate?: number | null; // MAD per 1 USD
   cihTxId?: string;
+  
+  // Euro Equivalent calculation
+  eurRate?: number | null; // MAD per 1 EUR (e.g. 10.85)
+  eurAmount?: number | null; // Value in EUR (€)
 
   // Step 4: Final Payout / Destination
   recipient?: string; // e.g., 'Adnan', 'Zouhir', 'Cash Payout'
   payoutAmount?: number | null; // MAD
   payoutDate?: string;
-  payoutMethod?: string; // 'Cash', 'Bank Transfer', etc.
+  payoutMethod?: string;
 
   // For Adnan workflow
   transferredToHicham?: boolean;

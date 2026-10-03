@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useTransactionStore } from '@/store/useTransactionStore';
-import { formatUSD, formatMAD } from '@/lib/utils';
+import { formatUSD, formatMAD, formatEUR } from '@/lib/utils';
 import { Wallet, Coins, Building2, UserCheck } from 'lucide-react';
 
 export const GlobalMetrics: React.FC = () => {
@@ -76,7 +76,7 @@ export const GlobalMetrics: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Total in CIH Bank */}
+      {/* 3. Total in CIH Bank + Euro Equivalent */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 shadow-xs">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2.5">
@@ -93,7 +93,7 @@ export const GlobalMetrics: React.FC = () => {
             </div>
           </div>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800">
-            MAD
+            MAD / EUR
           </span>
         </div>
 
@@ -101,9 +101,8 @@ export const GlobalMetrics: React.FC = () => {
           <div className="text-xl lg:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
             {formatMAD(metrics.totalSettledCIHMAD)}
           </div>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-            {dict.cihSubtitle}
+          <p className="mt-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1">
+            <span>≈ {formatEUR(metrics.totalSettledEUR)} EUR</span>
           </p>
         </div>
       </div>
@@ -133,9 +132,8 @@ export const GlobalMetrics: React.FC = () => {
           <div className="text-xl lg:text-2xl font-extrabold text-purple-600 dark:text-purple-400 tracking-tight">
             {formatMAD(metrics.totalFinalPayoutMAD)}
           </div>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0"></span>
-            {dict.payoutSubtitle}
+          <p className="mt-1 text-[11px] font-bold text-purple-600 dark:text-purple-300 font-mono flex items-center gap-1">
+            <span>≈ {formatEUR(metrics.totalFinalPayoutEUR)} EUR</span>
           </p>
         </div>
       </div>

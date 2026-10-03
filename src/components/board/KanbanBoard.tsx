@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useTransactionStore, PROFILES } from '@/store/useTransactionStore';
 import { Transaction, PipelineStatus } from '@/types';
-import { formatUSD, formatMAD, formatDate } from '@/lib/utils';
+import { formatUSD, formatMAD, formatEUR, formatDate } from '@/lib/utils';
 import { 
   Plus, 
   Wallet, 
@@ -61,7 +61,7 @@ export const KanbanBoard: React.FC = () => {
     {
       id: 'settled_cih',
       title: 'CIH Bank',
-      currency: 'MAD',
+      currency: 'MAD / EUR',
       icon: <Building2 className="w-4 h-4 text-emerald-600" />,
       color: 'text-emerald-600 dark:text-emerald-400',
       bgAccent: 'bg-emerald-50/60 dark:bg-emerald-950/30',
@@ -70,7 +70,7 @@ export const KanbanBoard: React.FC = () => {
     {
       id: 'final_payout',
       title: 'Final Payout',
-      currency: 'MAD',
+      currency: 'MAD / EUR',
       icon: <UserCheck className="w-4 h-4 text-purple-600" />,
       color: 'text-purple-600 dark:text-purple-400',
       bgAccent: 'bg-purple-50/60 dark:bg-purple-950/30',
@@ -180,6 +180,7 @@ export const KanbanBoard: React.FC = () => {
                 colTransactions.map((tx) => {
                   const profile = PROFILES[tx.account];
                   const fee = tx.binanceFee ?? (tx.binanceAmount ? Number((tx.kastAmount - tx.binanceAmount).toFixed(2)) : 0);
+                  const effectiveEur = tx.eurAmount || (tx.cihAmount && tx.eurRate ? Number((tx.cihAmount / tx.eurRate).toFixed(2)) : null);
 
                   return (
                     <div
@@ -240,14 +241,31 @@ export const KanbanBoard: React.FC = () => {
                             </div>
                           )}
 
-                          {col.id === 'settled_cih' && tx.exchangeRate && (
-                            <div className="text-[10px] text-emerald-600">
-                              @ {tx.exchangeRate} {dict.ratePerUSD}
+                          {/* CIH Bank Euro Value + USD Rate */}
+                          {col.id === 'settled_cih' && (
+                            <div className="space-y-0.5">
+                              {effectiveEur && (
+                                <div className="text-[11px] font-bold text-blue-600 dark:text-blue-400 font-mono">
+                                  ≈ {formatEUR(effectiveEur)} {tx.eurRate ? `(@ ${tx.eurRate})` : ''}
+                                </div>
+                              )}
+                              {tx.exchangeRate && (
+                                <div className="text-[10px] text-emerald-600">
+                                  @ {tx.exchangeRate} {dict.ratePerUSD}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Final Payout Euro Value */}
+                          {col.id === 'final_payout' && effectiveEur && (
+                            <div className="text-[11px] font-bold text-purple-600 dark:text-purple-400 font-mono">
+                              ≈ {formatEUR(effectiveEur)}
                             </div>
                           )}
 
                           {col.id === 'final_payout' && tx.payoutMethod && (
-                            <div className="text-[10px] text-purple-500">
+                            <div className="text-[10px] text-slate-400">
                               {tx.payoutMethod}
                             </div>
                           )}

@@ -82,6 +82,8 @@ interface TransactionStore {
       binanceFee?: number;
       cihAmount?: number;
       exchangeRate?: number;
+      eurRate?: number;
+      eurAmount?: number;
       recipient?: string;
       payoutAmount?: number;
       payoutDate?: string;
@@ -97,7 +99,9 @@ interface TransactionStore {
     totalInKastUSD: number;
     totalInBinanceUSD: number;
     totalSettledCIHMAD: number;
+    totalSettledEUR: number;
     totalFinalPayoutMAD: number;
+    totalFinalPayoutEUR: number;
     totalFeesUSD: number;
     count: number;
   };
@@ -237,14 +241,25 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           const baseUSD = t.binanceAmount || t.kastAmount;
           const rate = extraData.exchangeRate ?? 9.90;
           merged.exchangeRate = rate;
-          merged.cihAmount = extraData.cihAmount ?? Number((baseUSD * rate).toFixed(2));
+          const cihMAD = extraData.cihAmount ?? Number((baseUSD * rate).toFixed(2));
+          merged.cihAmount = cihMAD;
+          
+          // Euro manual conversion
+          const eurR = extraData.eurRate || t.eurRate || 10.85;
+          merged.eurRate = eurR;
+          merged.eurAmount = extraData.eurAmount ?? Number((cihMAD / eurR).toFixed(2));
         }
 
         if (targetStage === 'final_payout') {
           merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
-          merged.payoutAmount = extraData.payoutAmount ?? t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90));
+          const payoutMAD = extraData.payoutAmount ?? t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90));
+          merged.payoutAmount = payoutMAD;
           merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
           merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
+          
+          const eurR = extraData.eurRate || t.eurRate || 10.85;
+          merged.eurRate = eurR;
+          merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
         }
 
         if (targetStage === 'transferred_to_hicham') {
@@ -295,7 +310,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     let totalInKastUSD = 0;
     let totalInBinanceUSD = 0;
     let totalSettledCIHMAD = 0;
+    let totalSettledEUR = 0;
     let totalFinalPayoutMAD = 0;
+    let totalFinalPayoutEUR = 0;
     let totalFeesUSD = 0;
 
     list.forEach(tx => {
@@ -308,8 +325,11 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         totalInBinanceUSD += (tx.binanceAmount || tx.kastAmount || 0);
       } else if (tx.status === 'settled_cih') {
         totalSettledCIHMAD += tx.cihAmount || 0;
+        totalSettledEUR += (tx.eurAmount || (tx.cihAmount ? tx.cihAmount / (tx.eurRate || 10.85) : 0));
       } else if (tx.status === 'final_payout') {
-        totalFinalPayoutMAD += (tx.payoutAmount || tx.cihAmount || 0);
+        const pMAD = (tx.payoutAmount || tx.cihAmount || 0);
+        totalFinalPayoutMAD += pMAD;
+        totalFinalPayoutEUR += (tx.eurAmount || (pMAD / (tx.eurRate || 10.85)));
       }
     });
 
@@ -317,7 +337,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       totalInKastUSD,
       totalInBinanceUSD,
       totalSettledCIHMAD,
+      totalSettledEUR,
       totalFinalPayoutMAD,
+      totalFinalPayoutEUR,
       totalFeesUSD,
       count: list.length
     };

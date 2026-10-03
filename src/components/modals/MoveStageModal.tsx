@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTransactionStore } from '@/store/useTransactionStore';
-import { formatUSD, formatMAD } from '@/lib/utils';
-import { X, Coins, Building2, UserCheck } from 'lucide-react';
+import { formatUSD, formatMAD, formatEUR } from '@/lib/utils';
+import { X, Coins, Building2, UserCheck, Euro } from 'lucide-react';
 
 export const MoveStageModal: React.FC = () => {
   const { moveModalTx, closeMoveModal, moveTransactionStage, t } = useTransactionStore();
@@ -16,6 +16,8 @@ export const MoveStageModal: React.FC = () => {
   // Step 3: CIH
   const [exchangeRate, setExchangeRate] = useState<string>('9.90');
   const [cihAmount, setCihAmount] = useState<string>('');
+  const [eurRate, setEurRate] = useState<string>('10.85');
+  const [eurAmount, setEurAmount] = useState<string>('');
 
   // Step 4: Final Payout
   const [recipient, setRecipient] = useState<string>('');
@@ -35,8 +37,12 @@ export const MoveStageModal: React.FC = () => {
       } else if (targetStage === 'settled_cih') {
         const netUSD = tx.binanceAmount || baseUSD;
         const rate = tx.exchangeRate || 9.90;
+        const eRate = tx.eurRate || 10.85;
+        const cAmt = tx.cihAmount ? tx.cihAmount : Number((netUSD * rate).toFixed(2));
         setExchangeRate(rate.toString());
-        setCihAmount(tx.cihAmount ? tx.cihAmount.toString() : (netUSD * rate).toFixed(2));
+        setCihAmount(cAmt.toString());
+        setEurRate(eRate.toString());
+        setEurAmount((cAmt / eRate).toFixed(2));
       } else if (targetStage === 'final_payout') {
         const defaultRecipient = tx.account === 'adnan' ? 'Adnan' : tx.account === 'zouhir' ? 'Zouhir' : 'Hicham';
         setRecipient(tx.recipient || defaultRecipient);
@@ -75,7 +81,12 @@ export const MoveStageModal: React.FC = () => {
     const r = parseFloat(rStr);
     const base = tx.binanceAmount || tx.kastAmount;
     if (!isNaN(r) && base) {
-      setCihAmount((base * r).toFixed(2));
+      const calculatedMAD = Number((base * r).toFixed(2));
+      setCihAmount(calculatedMAD.toString());
+      const eR = parseFloat(eurRate);
+      if (!isNaN(eR) && eR > 0) {
+        setEurAmount((calculatedMAD / eR).toFixed(2));
+      }
     }
   };
 
@@ -85,6 +96,19 @@ export const MoveStageModal: React.FC = () => {
     const base = tx.binanceAmount || tx.kastAmount;
     if (!isNaN(c) && base > 0) {
       setExchangeRate((c / base).toFixed(4));
+    }
+    const eR = parseFloat(eurRate);
+    if (!isNaN(c) && !isNaN(eR) && eR > 0) {
+      setEurAmount((c / eR).toFixed(2));
+    }
+  };
+
+  const handleEurRateChange = (eStr: string) => {
+    setEurRate(eStr);
+    const eR = parseFloat(eStr);
+    const c = parseFloat(cihAmount);
+    if (!isNaN(eR) && eR > 0 && !isNaN(c)) {
+      setEurAmount((c / eR).toFixed(2));
     }
   };
 
@@ -99,9 +123,14 @@ export const MoveStageModal: React.FC = () => {
         binanceFee: fee,
       });
     } else if (targetStage === 'settled_cih') {
+      const cihA = parseFloat(cihAmount) || undefined;
+      const eR = parseFloat(eurRate) || 10.85;
+      const eurA = cihA ? Number((cihA / eR).toFixed(2)) : undefined;
       await moveTransactionStage(tx.id, 'settled_cih', {
-        cihAmount: parseFloat(cihAmount) || undefined,
+        cihAmount: cihA,
         exchangeRate: parseFloat(exchangeRate) || 9.90,
+        eurRate: eR,
+        eurAmount: eurA,
       });
     } else if (targetStage === 'final_payout') {
       await moveTransactionStage(tx.id, 'final_payout', {
@@ -185,21 +214,37 @@ export const MoveStageModal: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 3: CIH Bank */}
+          {/* STEP 3: CIH Bank + Euro Manual Conversion */}
           {targetStage === 'settled_cih' && (
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {dict.p2pRate}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={exchangeRate}
-                  onChange={(e) => handleRateChange(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    USD Rate (MAD/USD)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={exchangeRate}
+                    onChange={(e) => handleRateChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-blue-600 dark:text-blue-400 mb-1">
+                    💶 EUR Rate (MAD/EUR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={eurRate}
+                    onChange={(e) => handleEurRateChange(e.target.value)}
+                    placeholder="10.85"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
 
               <div>
@@ -215,6 +260,19 @@ export const MoveStageModal: React.FC = () => {
                   required
                 />
               </div>
+
+              {/* Real-time Euro equivalent badge */}
+              {eurAmount && parseFloat(eurAmount) > 0 && (
+                <div className="p-2.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-xl border border-blue-200/80 dark:border-blue-900/60 flex items-center justify-between text-xs">
+                  <span className="text-blue-700 dark:text-blue-300 font-semibold flex items-center gap-1">
+                    <Euro className="w-3.5 h-3.5" />
+                    {dict.eurEquivalent}:
+                  </span>
+                  <span className="text-sm font-extrabold font-mono text-blue-700 dark:text-blue-300">
+                    {formatEUR(parseFloat(eurAmount))}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -225,7 +283,6 @@ export const MoveStageModal: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   {dict.recipientLabel}
                 </label>
-                {/* Quick select chips */}
                 <div className="flex gap-2 mb-2">
                   {['Adnan', 'Zouhir', 'Hicham', 'Cash Payout'].map((name) => (
                     <button
