@@ -3,16 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { formatUSD, formatMAD } from '@/lib/utils';
-import { X, Coins, Building2 } from 'lucide-react';
+import { X, Coins, Building2, UserCheck } from 'lucide-react';
 
 export const MoveStageModal: React.FC = () => {
   const { moveModalTx, closeMoveModal, moveTransactionStage, t } = useTransactionStore();
   const dict = t();
 
+  // Step 2: Binance
   const [binanceAmount, setBinanceAmount] = useState<string>('');
   const [binanceFee, setBinanceFee] = useState<string>('');
+
+  // Step 3: CIH
   const [exchangeRate, setExchangeRate] = useState<string>('9.90');
   const [cihAmount, setCihAmount] = useState<string>('');
+
+  // Step 4: Final Payout
+  const [recipient, setRecipient] = useState<string>('');
+  const [payoutAmount, setPayoutAmount] = useState<string>('');
+  const [payoutMethod, setPayoutMethod] = useState<string>('Bank Transfer / Cash');
 
   useEffect(() => {
     if (moveModalTx) {
@@ -20,15 +28,21 @@ export const MoveStageModal: React.FC = () => {
       const baseUSD = tx.kastAmount || 0;
 
       if (targetStage === 'in_binance') {
-        const fee = Number((baseUSD * 0.01).toFixed(2));
-        const net = Number((baseUSD - fee).toFixed(2));
-        setBinanceFee(fee.toString());
-        setBinanceAmount(net.toString());
+        const defaultFee = Number((baseUSD * 0.01).toFixed(2));
+        const defaultNet = Number((baseUSD - defaultFee).toFixed(2));
+        setBinanceFee(tx.binanceFee?.toString() || defaultFee.toString());
+        setBinanceAmount(tx.binanceAmount?.toString() || defaultNet.toString());
       } else if (targetStage === 'settled_cih') {
         const netUSD = tx.binanceAmount || baseUSD;
-        const rate = 9.90;
+        const rate = tx.exchangeRate || 9.90;
         setExchangeRate(rate.toString());
-        setCihAmount((netUSD * rate).toFixed(2));
+        setCihAmount(tx.cihAmount ? tx.cihAmount.toString() : (netUSD * rate).toFixed(2));
+      } else if (targetStage === 'final_payout') {
+        const defaultRecipient = tx.account === 'adnan' ? 'Adnan' : tx.account === 'zouhir' ? 'Zouhir' : 'Hicham';
+        setRecipient(tx.recipient || defaultRecipient);
+        const amtMAD = tx.cihAmount || (tx.kastAmount * 9.90);
+        setPayoutAmount(tx.payoutAmount ? tx.payoutAmount.toString() : amtMAD.toFixed(2));
+        setPayoutMethod(tx.payoutMethod || 'Bank Transfer / Cash');
       }
     }
   }, [moveModalTx]);
@@ -36,6 +50,25 @@ export const MoveStageModal: React.FC = () => {
   if (!moveModalTx) return null;
 
   const { tx, targetStage } = moveModalTx;
+  const baseUSD = tx.kastAmount || 0;
+
+  // Auto calculate fee when typing Binance net amount
+  const handleBinanceNetChange = (netStr: string) => {
+    setBinanceAmount(netStr);
+    const net = parseFloat(netStr);
+    if (!isNaN(net) && baseUSD >= net) {
+      setBinanceFee((baseUSD - net).toFixed(2));
+    }
+  };
+
+  // Auto calculate Binance net amount when typing fee
+  const handleBinanceFeeChange = (feeStr: string) => {
+    setBinanceFee(feeStr);
+    const fee = parseFloat(feeStr);
+    if (!isNaN(fee) && baseUSD >= fee) {
+      setBinanceAmount((baseUSD - fee).toFixed(2));
+    }
+  };
 
   const handleRateChange = (rStr: string) => {
     setExchangeRate(rStr);
@@ -59,14 +92,23 @@ export const MoveStageModal: React.FC = () => {
     e.preventDefault();
 
     if (targetStage === 'in_binance') {
+      const net = parseFloat(binanceAmount) || tx.kastAmount;
+      const fee = parseFloat(binanceFee) ?? Number((tx.kastAmount - net).toFixed(2));
       await moveTransactionStage(tx.id, 'in_binance', {
-        binanceAmount: parseFloat(binanceAmount) || tx.kastAmount,
-        binanceFee: parseFloat(binanceFee) || 0,
+        binanceAmount: net,
+        binanceFee: fee,
       });
     } else if (targetStage === 'settled_cih') {
       await moveTransactionStage(tx.id, 'settled_cih', {
         cihAmount: parseFloat(cihAmount) || undefined,
         exchangeRate: parseFloat(exchangeRate) || 9.90,
+      });
+    } else if (targetStage === 'final_payout') {
+      await moveTransactionStage(tx.id, 'final_payout', {
+        recipient: recipient.trim() || 'Partner',
+        payoutAmount: parseFloat(payoutAmount) || (tx.cihAmount ?? 0),
+        payoutMethod,
+        payoutDate: new Date().toISOString().split('T')[0],
       });
     } else {
       await moveTransactionStage(tx.id, targetStage);
@@ -80,16 +122,24 @@ export const MoveStageModal: React.FC = () => {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-              targetStage === 'in_binance' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+              targetStage === 'in_binance' 
+                ? 'bg-amber-50 text-amber-600' 
+                : targetStage === 'settled_cih'
+                ? 'bg-emerald-50 text-emerald-600'
+                : 'bg-purple-50 text-purple-600'
             }`}>
-              {targetStage === 'in_binance' ? <Coins className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+              {targetStage === 'in_binance' && <Coins className="w-4 h-4" />}
+              {targetStage === 'settled_cih' && <Building2 className="w-4 h-4" />}
+              {targetStage === 'final_payout' && <UserCheck className="w-4 h-4" />}
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                {targetStage === 'in_binance' ? dict.transferToBinanceTitle : dict.withdrawToCIHTitle}
+                {targetStage === 'in_binance' && dict.transferToBinanceTitle}
+                {targetStage === 'settled_cih' && dict.withdrawToCIHTitle}
+                {targetStage === 'final_payout' && dict.finalPayoutTitle}
               </h3>
               <p className="text-[11px] text-slate-400">
-                {tx.reference} • {formatUSD(tx.kastAmount)}
+                {tx.reference} • KAST: {formatUSD(tx.kastAmount)}
               </p>
             </div>
           </div>
@@ -103,6 +153,7 @@ export const MoveStageModal: React.FC = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* STEP 2: Binance with dynamic auto fee */}
           {targetStage === 'in_binance' && (
             <div className="space-y-3">
               <div>
@@ -113,27 +164,28 @@ export const MoveStageModal: React.FC = () => {
                   type="number"
                   step="0.01"
                   value={binanceAmount}
-                  onChange={(e) => setBinanceAmount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                  onChange={(e) => handleBinanceNetChange(e.target.value)}
+                  className="w-full px-3 py-2 text-sm font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-rose-500 mb-1">
-                  {dict.transferFeeUSD}
+                  {dict.transferFeeUSD} (KAST ${baseUSD.toFixed(2)} - Net)
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   value={binanceFee}
-                  onChange={(e) => setBinanceFee(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-rose-500"
+                  onChange={(e) => handleBinanceFeeChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             </div>
           )}
 
+          {/* STEP 3: CIH Bank */}
           {targetStage === 'settled_cih' && (
             <div className="space-y-3">
               <div>
@@ -166,7 +218,70 @@ export const MoveStageModal: React.FC = () => {
             </div>
           )}
 
-          {/* Action */}
+          {/* STEP 4: Final Payout / Destination */}
+          {targetStage === 'final_payout' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  {dict.recipientLabel}
+                </label>
+                {/* Quick select chips */}
+                <div className="flex gap-2 mb-2">
+                  {['Adnan', 'Zouhir', 'Hicham', 'Cash Payout'].map((name) => (
+                    <button
+                      type="button"
+                      key={name}
+                      onClick={() => setRecipient(name)}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${
+                        recipient === name
+                          ? 'bg-purple-600 text-white border-purple-700'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  placeholder={dict.recipientPlaceholder}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-semibold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-purple-600 dark:text-purple-400 mb-1">
+                  {dict.payoutAmountLabel}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  className="w-full px-3 py-2 text-sm font-mono font-extrabold text-purple-600 bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  {dict.paymentMethodLabel}
+                </label>
+                <input
+                  type="text"
+                  value={payoutMethod}
+                  onChange={(e) => setPayoutMethod(e.target.value)}
+                  placeholder="e.g. CIH Virement, Cash, Wafacash..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
@@ -178,7 +293,11 @@ export const MoveStageModal: React.FC = () => {
             <button
               type="submit"
               className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs active:scale-95 transition-all ${
-                targetStage === 'in_binance' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'
+                targetStage === 'in_binance' 
+                  ? 'bg-amber-500 hover:bg-amber-600' 
+                  : targetStage === 'settled_cih'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-purple-600 hover:bg-purple-700'
               }`}
             >
               {dict.confirmMove}

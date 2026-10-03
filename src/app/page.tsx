@@ -6,6 +6,7 @@ import { GlobalMetrics } from '@/components/dashboard/GlobalMetrics';
 import { KanbanBoard } from '@/components/board/KanbanBoard';
 import { AddTransactionModal } from '@/components/modals/AddTransactionModal';
 import { MoveStageModal } from '@/components/modals/MoveStageModal';
+import { ReportModal } from '@/components/modals/ReportModal';
 import { useTransactionStore } from '@/store/useTransactionStore';
 
 export default function Home() {
@@ -20,14 +21,14 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50/60 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
-      <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
-        {/* 1. Account Selector Pills */}
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-5 flex-1">
+        {/* 1. Account Selector Pills, Report Export, Language */}
         <Header />
 
-        {/* 2. Three Summary Cards */}
+        {/* 2. Four Summary Cards (KAST, Binance, CIH Bank, Final Payouts) */}
         <GlobalMetrics />
 
-        {/* 3. ClickUp-style Pipeline Board (KAST | Binance | CIH) with Drag & Drop */}
+        {/* 3. 4-Column Pipeline Board with Drag & Drop */}
         <section className="pt-2">
           <KanbanBoard />
         </section>
@@ -36,6 +37,7 @@ export default function Home() {
       {/* Modals */}
       <AddTransactionModal />
       <MoveStageModal />
+      <ReportModal />
     </div>
   );
 }

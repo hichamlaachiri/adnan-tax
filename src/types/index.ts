@@ -4,28 +4,35 @@ export type PipelineStatus =
   | 'in_kast' 
   | 'in_binance' 
   | 'settled_cih' 
+  | 'final_payout'
   | 'transferred_to_hicham';
 
 export interface Transaction {
   id: string;
   account: 'hicham' | 'zouhir' | 'adnan';
   date: string; // YYYY-MM-DD
-  source: string; // e.g., 'Global Blue Tax Free'
+  source: string; // e.g., 'Global Blue Refund'
   reference?: string; // e.g., 'GB-884920'
   
   // Step 1: KAST
   kastAmount: number; // USD
-  kastFee?: number; // Initial entry fee if any
+  kastFee?: number;
   
   // Step 2: Binance
   binanceAmount?: number | null; // USD/USDT after fees
-  binanceFee?: number | null; // Fee deducted (kastAmount - binanceAmount)
+  binanceFee?: number | null; // kastAmount - binanceAmount
   binanceTxId?: string;
   
   // Step 3: CIH Bank
   cihAmount?: number | null; // MAD (Moroccan Dirham)
   exchangeRate?: number | null; // MAD per 1 USD
   cihTxId?: string;
+
+  // Step 4: Final Payout / Destination
+  recipient?: string; // e.g., 'Adnan', 'Zouhir', 'Cash Payout'
+  payoutAmount?: number | null; // MAD
+  payoutDate?: string;
+  payoutMethod?: string; // 'Cash', 'Bank Transfer', etc.
 
   // For Adnan workflow
   transferredToHicham?: boolean;
@@ -46,14 +53,4 @@ export interface AccountSummary {
   color: string;
   badgeBg: string;
   workflow: string;
-}
-
-export interface DashboardMetrics {
-  totalInKastUSD: number;
-  totalInBinanceUSD: number;
-  totalSettledCIHMAD: number;
-  totalGlobalBlueReceivedUSD: number;
-  totalFeesPaidUSD: number;
-  avgExchangeRate: number;
-  activeTransactionsCount: number;
 }

@@ -11,7 +11,7 @@ export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
     avatar: 'H',
     color: 'emerald',
     badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    workflow: 'KAST → Binance → CIH',
+    workflow: 'KAST → Binance → CIH → Payout',
   },
   zouhir: {
     id: 'zouhir',
@@ -20,7 +20,7 @@ export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
     avatar: 'Z',
     color: 'indigo',
     badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    workflow: 'KAST → Binance → CIH',
+    workflow: 'KAST → Binance → CIH → Payout',
   },
   adnan: {
     id: 'adnan',
@@ -46,6 +46,7 @@ interface TransactionStore {
   isQuickAddOpen: boolean;
   quickAddStage: PipelineStatus;
   moveModalTx: { tx: Transaction; targetStage: PipelineStatus } | null;
+  isReportOpen: boolean;
   
   // Actions
   setSelectedAccount: (account: AccountId) => void;
@@ -57,6 +58,8 @@ interface TransactionStore {
   
   openMoveModal: (tx: Transaction, targetStage: PipelineStatus) => void;
   closeMoveModal: () => void;
+  
+  setReportOpen: (open: boolean) => void;
   
   setTransactions: (txs: Transaction[]) => void;
   initStore: () => () => void;
@@ -79,6 +82,10 @@ interface TransactionStore {
       binanceFee?: number;
       cihAmount?: number;
       exchangeRate?: number;
+      recipient?: string;
+      payoutAmount?: number;
+      payoutDate?: string;
+      payoutMethod?: string;
       notes?: string;
     }
   ) => Promise<void>;
@@ -90,6 +97,8 @@ interface TransactionStore {
     totalInKastUSD: number;
     totalInBinanceUSD: number;
     totalSettledCIHMAD: number;
+    totalFinalPayoutMAD: number;
+    totalFeesUSD: number;
     count: number;
   };
   getFilteredTransactions: () => Transaction[];
@@ -113,6 +122,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   isQuickAddOpen: false,
   quickAddStage: 'in_kast',
   moveModalTx: null,
+  isReportOpen: false,
 
   setSelectedAccount: (acc) => set({ selectedAccount: acc }),
   
@@ -132,6 +142,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
   openMoveModal: (tx, targetStage) => set({ moveModalTx: { tx, targetStage } }),
   closeMoveModal: () => set({ moveModalTx: null }),
+  
+  setReportOpen: (open) => set({ isReportOpen: open }),
 
   setTransactions: (txs) => {
     set({ transactions: txs, isLoaded: true });
@@ -139,7 +151,6 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   },
 
   initStore: () => {
-    // 0. Load saved language preference
     if (typeof window !== 'undefined') {
       const savedLang = localStorage.getItem(LANG_STORAGE_KEY) as Language;
       if (savedLang && (savedLang === 'en' || savedLang === 'es' || savedLang === 'ar')) {
@@ -149,7 +160,6 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       }
     }
 
-    // 1. Try Firebase real-time subscription first
     if (isFirebaseConfigured) {
       const unsubscribe = subscribeToTransactions((txs) => {
         set({ transactions: txs, isLoaded: true });
@@ -158,7 +168,6 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       if (unsubscribe) return unsubscribe;
     }
 
-    // 2. Fallback to localStorage
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
@@ -219,7 +228,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         };
 
         if (targetStage === 'in_binance') {
-          const fee = extraData.binanceFee ?? Number((t.kastAmount * 0.01).toFixed(2));
+          const fee = extraData.binanceFee ?? (extraData.binanceAmount ? Number((t.kastAmount - extraData.binanceAmount).toFixed(2)) : Number((t.kastAmount * 0.01).toFixed(2)));
           merged.binanceAmount = extraData.binanceAmount ?? Number((t.kastAmount - fee).toFixed(2));
           merged.binanceFee = fee;
         }
@@ -229,6 +238,13 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           const rate = extraData.exchangeRate ?? 9.90;
           merged.exchangeRate = rate;
           merged.cihAmount = extraData.cihAmount ?? Number((baseUSD * rate).toFixed(2));
+        }
+
+        if (targetStage === 'final_payout') {
+          merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
+          merged.payoutAmount = extraData.payoutAmount ?? t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90));
+          merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
+          merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
         }
 
         if (targetStage === 'transferred_to_hicham') {
@@ -279,14 +295,21 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     let totalInKastUSD = 0;
     let totalInBinanceUSD = 0;
     let totalSettledCIHMAD = 0;
+    let totalFinalPayoutMAD = 0;
+    let totalFeesUSD = 0;
 
     list.forEach(tx => {
+      if (tx.binanceFee) {
+        totalFeesUSD += tx.binanceFee;
+      }
       if (tx.status === 'in_kast') {
         totalInKastUSD += tx.kastAmount || 0;
       } else if (tx.status === 'in_binance') {
         totalInBinanceUSD += (tx.binanceAmount || tx.kastAmount || 0);
-      } else if (tx.status === 'settled_cih' && tx.cihAmount) {
-        totalSettledCIHMAD += tx.cihAmount;
+      } else if (tx.status === 'settled_cih') {
+        totalSettledCIHMAD += tx.cihAmount || 0;
+      } else if (tx.status === 'final_payout') {
+        totalFinalPayoutMAD += (tx.payoutAmount || tx.cihAmount || 0);
       }
     });
 
@@ -294,6 +317,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       totalInKastUSD,
       totalInBinanceUSD,
       totalSettledCIHMAD,
+      totalFinalPayoutMAD,
+      totalFeesUSD,
       count: list.length
     };
   }
