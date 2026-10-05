@@ -247,6 +247,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     if (!tx) return;
 
     const currentLastRate = get().lastEurRate;
+    const extraCreatedTxs: Transaction[] = [];
 
     const updated = get().transactions.map(t => {
       if (t.id === id) {
@@ -276,15 +277,57 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         }
 
         if (targetStage === 'final_payout') {
-          merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
-          const payoutMAD = extraData.payoutAmount ?? t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90));
-          merged.payoutAmount = payoutMAD;
-          merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
-          merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
-          
+          const currentCih = t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90)) ?? 0;
+          const payoutMAD = extraData.payoutAmount ?? currentCih;
           const eurR = extraData.eurRate || t.eurRate || currentLastRate || 10.85;
-          merged.eurRate = eurR;
-          merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
+
+          const isPartial = currentCih > 0 && payoutMAD > 0 && (currentCih - payoutMAD) >= 0.01;
+
+          if (isPartial) {
+            const remainingMAD = Number((currentCih - payoutMAD).toFixed(2));
+            const exRate = t.exchangeRate || 9.90;
+
+            // 1. Current transaction becomes the Paid Out portion
+            merged.status = 'final_payout';
+            merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
+            merged.cihAmount = payoutMAD;
+            merged.payoutAmount = payoutMAD;
+            merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
+            merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
+            merged.eurRate = eurR;
+            merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
+            merged.reference = `${t.reference} (Paid)`;
+
+            // 2. Create the remaining portion that stays in CIH Bank
+            const remainingTx: Transaction = {
+              id: 'tx-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+              account: t.account,
+              date: t.date,
+              source: t.source,
+              reference: `${t.reference.replace(' (Remaining)', '')} (Remaining)`,
+              kastAmount: Number((remainingMAD / exRate).toFixed(2)),
+              binanceAmount: Number((remainingMAD / exRate).toFixed(2)),
+              status: 'settled_cih',
+              exchangeRate: exRate,
+              cihAmount: remainingMAD,
+              eurRate: eurR,
+              eurAmount: Number((remainingMAD / eurR).toFixed(2)),
+              notes: `Remaining balance from ${t.reference}`,
+              createdAt: Date.now() + 1,
+              updatedAt: Date.now() + 1,
+            };
+
+            extraCreatedTxs.push(remainingTx);
+          } else {
+            // Full Payout
+            merged.status = 'final_payout';
+            merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
+            merged.payoutAmount = payoutMAD;
+            merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
+            merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
+            merged.eurRate = eurR;
+            merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
+          }
         }
 
         if (targetStage === 'transferred_to_hicham') {
@@ -304,12 +347,16 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       get().setLastEurRate(extraData.eurRate);
     }
 
-    set({ transactions: updated, moveModalTx: null });
-    saveStorage(updated);
+    const finalTransactions = [...extraCreatedTxs, ...updated];
+    set({ transactions: finalTransactions, moveModalTx: null });
+    saveStorage(finalTransactions);
 
-    const changed = updated.find(t => t.id === id);
-    if (changed && isFirebaseConfigured) {
-      await saveTransactionToFirebase(changed);
+    if (isFirebaseConfigured) {
+      const changed = finalTransactions.find(t => t.id === id);
+      if (changed) await saveTransactionToFirebase(changed);
+      for (const extra of extraCreatedTxs) {
+        await saveTransactionToFirebase(extra);
+      }
     }
   },
 

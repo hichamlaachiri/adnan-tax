@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { formatUSD, formatMAD, formatEUR } from '@/lib/utils';
-import { X, Coins, Building2, UserCheck, Euro } from 'lucide-react';
+import { X, Coins, Building2, UserCheck, Euro, Split } from 'lucide-react';
 
 export const MoveStageModal: React.FC = () => {
   const { moveModalTx, closeMoveModal, moveTransactionStage, lastEurRate, t } = useTransactionStore();
@@ -46,7 +46,7 @@ export const MoveStageModal: React.FC = () => {
       } else if (targetStage === 'final_payout') {
         const defaultRecipient = tx.account === 'adnan' ? 'Adnan' : tx.account === 'zouhir' ? 'Zouhir' : 'Hicham';
         setRecipient(tx.recipient || defaultRecipient);
-        const amtMAD = tx.cihAmount || (tx.kastAmount * 9.90);
+        const amtMAD = tx.cihAmount || (tx.kastAmount * (tx.exchangeRate || 9.90));
         setPayoutAmount(tx.payoutAmount ? tx.payoutAmount.toString() : amtMAD.toFixed(2));
         setPayoutMethod(tx.payoutMethod || 'Bank Transfer / Cash');
       }
@@ -124,7 +124,7 @@ export const MoveStageModal: React.FC = () => {
       });
     } else if (targetStage === 'settled_cih') {
       const cihA = parseFloat(cihAmount) || undefined;
-      const eR = parseFloat(eurRate) || 10.85;
+      const eR = parseFloat(eurRate) || lastEurRate || 10.85;
       const eurA = cihA ? Number((cihA / eR).toFixed(2)) : undefined;
       await moveTransactionStage(tx.id, 'settled_cih', {
         cihAmount: cihA,
@@ -143,6 +143,13 @@ export const MoveStageModal: React.FC = () => {
       await moveTransactionStage(tx.id, targetStage);
     }
   };
+
+  // Calculations for Step 4 partial payout
+  const maxAvailableInCIH = tx.cihAmount || (tx.kastAmount * (tx.exchangeRate || 9.90)) || 0;
+  const currentPayoutVal = parseFloat(payoutAmount) || 0;
+  const remainingVal = maxAvailableInCIH > currentPayoutVal ? Number((maxAvailableInCIH - currentPayoutVal).toFixed(2)) : 0;
+  const isPartialSplit = currentPayoutVal > 0 && maxAvailableInCIH > currentPayoutVal && remainingVal >= 0.01;
+  const effectiveRate = tx.eurRate || lastEurRate || 10.85;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
@@ -174,7 +181,7 @@ export const MoveStageModal: React.FC = () => {
           </div>
           <button
             onClick={closeMoveModal}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -276,23 +283,23 @@ export const MoveStageModal: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 4: Final Payout / Destination */}
+          {/* STEP 4: Final Payout / Destination with Auto-Split support */}
           {targetStage === 'final_payout' && (
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   {dict.recipientLabel}
                 </label>
-                <div className="flex gap-2 mb-2">
+                <div className="flex gap-2 mb-2 flex-wrap">
                   {['Adnan', 'Zouhir', 'Hicham', 'Cash Payout'].map((name) => (
                     <button
                       type="button"
                       key={name}
                       onClick={() => setRecipient(name)}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
                         recipient === name
-                          ? 'bg-purple-600 text-white border-purple-700'
-                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       {name}
@@ -310,18 +317,84 @@ export const MoveStageModal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-purple-600 dark:text-purple-400 mb-1">
-                  {dict.payoutAmountLabel}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={payoutAmount}
-                  onChange={(e) => setPayoutAmount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-mono font-extrabold text-purple-600 bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl"
-                  required
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-purple-600 dark:text-purple-400">
+                    {dict.payoutAmountLabel}
+                  </label>
+                  {maxAvailableInCIH > 0 && (
+                    <span className="text-[10px] text-slate-400">
+                      Total in CIH: <strong className="text-emerald-600">{formatMAD(maxAvailableInCIH)}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={payoutAmount}
+                    onChange={(e) => setPayoutAmount(e.target.value)}
+                    className="w-full px-3 py-2 text-sm font-mono font-extrabold text-purple-600 bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl"
+                    required
+                  />
+                </div>
+
+                {/* Quick amount shortcuts */}
+                {maxAvailableInCIH > 0 && (
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutAmount(maxAvailableInCIH.toString())}
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-950/50 text-slate-600 dark:text-slate-300 hover:text-purple-600 font-semibold transition-all cursor-pointer"
+                    >
+                      100% Full ({formatMAD(maxAvailableInCIH)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPayoutAmount(Math.floor(maxAvailableInCIH / 2).toString())}
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-950/50 text-slate-600 dark:text-slate-300 hover:text-purple-600 font-semibold transition-all cursor-pointer"
+                    >
+                      50% ({formatMAD(Math.floor(maxAvailableInCIH / 2))})
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {/* Auto-Split Live Breakdown Notification */}
+              {isPartialSplit && (
+                <div className="p-3 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 rounded-xl space-y-2 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+                    <Split className="w-3.5 h-3.5" />
+                    <span>Auto-Split: Daf3a Joz&apos;iya</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-amber-500/20">
+                    <div className="bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-amber-500/20">
+                      <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
+                        Paid to {recipient || 'Recipient'}:
+                      </span>
+                      <span className="font-bold font-mono text-purple-600 dark:text-purple-400 text-xs">
+                        {formatMAD(currentPayoutVal)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        ≈ {formatEUR(currentPayoutVal / effectiveRate)}
+                      </span>
+                    </div>
+
+                    <div className="bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-amber-500/20">
+                      <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
+                        Remaining in CIH:
+                      </span>
+                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 text-xs">
+                        {formatMAD(remainingVal)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        ≈ {formatEUR(remainingVal / effectiveRate)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
@@ -343,13 +416,13 @@ export const MoveStageModal: React.FC = () => {
             <button
               type="button"
               onClick={closeMoveModal}
-              className="px-4 py-2 text-xs font-semibold text-slate-500"
+              className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
             >
               {dict.cancel}
             </button>
             <button
               type="submit"
-              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs active:scale-95 transition-all ${
+              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer ${
                 targetStage === 'in_binance' 
                   ? 'bg-amber-500 hover:bg-amber-600' 
                   : targetStage === 'settled_cih'
@@ -357,7 +430,7 @@ export const MoveStageModal: React.FC = () => {
                   : 'bg-purple-600 hover:bg-purple-700'
               }`}
             >
-              {dict.confirmMove}
+              {isPartialSplit ? 'Confirm Split Payout' : dict.confirmMove}
             </button>
           </div>
         </form>
