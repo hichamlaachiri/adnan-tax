@@ -277,7 +277,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         }
 
         if (targetStage === 'final_payout') {
-          const currentCih = t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90)) ?? 0;
+          const currentCih = t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90));
           const payoutMAD = extraData.payoutAmount ?? currentCih;
           const eurR = extraData.eurRate || t.eurRate || currentLastRate || 10.85;
 
@@ -286,6 +286,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           if (isPartial) {
             const remainingMAD = Number((currentCih - payoutMAD).toFixed(2));
             const exRate = t.exchangeRate || 9.90;
+            const refBase = t.reference || t.source || 'GB-Payout';
 
             // 1. Current transaction becomes the Paid Out portion
             merged.status = 'final_payout';
@@ -296,7 +297,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
             merged.eurRate = eurR;
             merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
-            merged.reference = `${t.reference} (Paid)`;
+            merged.reference = `${refBase} (Paid)`;
 
             // 2. Create the remaining portion that stays in CIH Bank
             const remainingTx: Transaction = {
@@ -304,7 +305,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
               account: t.account,
               date: t.date,
               source: t.source,
-              reference: `${t.reference.replace(' (Remaining)', '')} (Remaining)`,
+              reference: `${refBase.replace(' (Remaining)', '')} (Remaining)`,
               kastAmount: Number((remainingMAD / exRate).toFixed(2)),
               binanceAmount: Number((remainingMAD / exRate).toFixed(2)),
               status: 'settled_cih',
@@ -312,7 +313,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
               cihAmount: remainingMAD,
               eurRate: eurR,
               eurAmount: Number((remainingMAD / eurR).toFixed(2)),
-              notes: `Remaining balance from ${t.reference}`,
+              notes: `Remaining balance from ${refBase}`,
               createdAt: Date.now() + 1,
               updatedAt: Date.now() + 1,
             };
