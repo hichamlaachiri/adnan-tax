@@ -7,12 +7,22 @@ export type PipelineStatus =
   | 'final_payout'
   | 'transferred_to_hicham';
 
+export interface PayoutInstallment {
+  id: string;
+  amount: number;
+  date: string;
+  recipient: string;
+  method?: string;
+  notes?: string;
+}
+
 export interface Transaction {
   id: string;
   account: 'hicham' | 'zouhir' | 'adnan';
   date: string; // YYYY-MM-DD
   source: string; // e.g., 'Global Blue Refund'
   reference?: string; // e.g., 'GB-884920'
+  parentTxId?: string; // Links split tranches to the original transaction
   
   // Step 1: KAST
   kastAmount: number; // USD
@@ -37,6 +47,7 @@ export interface Transaction {
   payoutAmount?: number | null; // MAD
   payoutDate?: string;
   payoutMethod?: string;
+  payoutHistory?: PayoutInstallment[]; // History of tranches accumulated into this card
 
   // For Adnan workflow
   transferredToHicham?: boolean;

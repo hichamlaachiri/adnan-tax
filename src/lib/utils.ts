@@ -68,3 +68,11 @@ export function formatDate(dateString: string): string {
     return dateString;
   }
 }
+
+// Strips '(Remaining)', '(Paid)', '(Payout)' suffixes to get original base reference e.g. GB-61014
+export function cleanReference(ref?: string): string {
+  if (!ref) return 'GB-Refund';
+  return ref
+    .replace(/\s*\((Remaining|Paid|Part \d+|Payout)\)/gi, '')
+    .trim();
+}

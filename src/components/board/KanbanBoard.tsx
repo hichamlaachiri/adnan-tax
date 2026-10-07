@@ -31,7 +31,6 @@ const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [rateVal, setRateVal] = useState(currentRate.toString());
 
-  // Keep internal input in sync if currentRate changes
   useEffect(() => {
     setRateVal(currentRate.toString());
   }, [currentRate]);
@@ -354,7 +353,7 @@ export const KanbanBoard: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Final Payout Column: Also display Euro equivalent and editable EUR rate under the amount */}
+                        {/* Final Payout Column: Euro equivalent and editable EUR rate */}
                         {col.id === 'final_payout' && (
                           <InlineEurRateEditor
                             txId={tx.id}
@@ -362,6 +361,26 @@ export const KanbanBoard: React.FC = () => {
                             currentRate={effectiveRate}
                             onUpdate={updateEurRate}
                           />
+                        )}
+
+                        {/* Final Payout Installments History Breakdown */}
+                        {col.id === 'final_payout' && tx.payoutHistory && tx.payoutHistory.length > 1 && (
+                          <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                            <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 flex items-center justify-between">
+                              <span>{tx.payoutHistory.length} Installments:</span>
+                              <span className="font-mono">{formatMAD(tx.payoutAmount || 0)}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              {tx.payoutHistory.map((inst, idx) => (
+                                <div key={inst.id || idx} className="text-[10px] flex items-center justify-between text-slate-500 dark:text-slate-400">
+                                  <span>• Daf3a {idx + 1} {inst.recipient ? `(${inst.recipient})` : ''}:</span>
+                                  <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                                    {formatMAD(inst.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
 

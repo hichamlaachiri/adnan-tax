@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { Transaction, AccountId, PipelineStatus, AccountSummary } from '@/types';
+import { Transaction, AccountId, PipelineStatus, AccountSummary, PayoutInstallment } from '@/types';
 import { isFirebaseConfigured, saveTransactionToFirebase, deleteTransactionFromFirebase, subscribeToTransactions } from '@/lib/firebase';
 import { Language, translations, Translations } from '@/lib/i18n';
+import { cleanReference, formatMAD } from '@/lib/utils';
 
 export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
   hicham: {
@@ -36,6 +37,69 @@ export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
 const STORAGE_KEY = 'taxfree_flow_transactions_live';
 const LANG_STORAGE_KEY = 'taxfree_flow_lang';
 const EUR_RATE_STORAGE_KEY = 'taxfree_last_eur_rate';
+
+// Consolidates multiple Final Payout cards with the same base reference into ONE single card
+export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[] {
+  const nonPayout: Transaction[] = [];
+  const payoutMap = new Map<string, Transaction>();
+  const toDeleteIds: string[] = [];
+
+  for (const tx of txs) {
+    if (tx.status === 'final_payout') {
+      const baseRef = cleanReference(tx.reference);
+      const key = `${tx.account}_${baseRef}`;
+
+      if (payoutMap.has(key)) {
+        const existing = payoutMap.get(key)!;
+        const currentAmt = tx.payoutAmount || tx.cihAmount || 0;
+        const existingAmt = existing.payoutAmount || existing.cihAmount || 0;
+        const totalAmt = Number((existingAmt + currentAmt).toFixed(2));
+        const rate = existing.eurRate || tx.eurRate || 10.85;
+
+        existing.payoutAmount = totalAmt;
+        existing.cihAmount = totalAmt;
+        existing.eurAmount = Number((totalAmt / rate).toFixed(2));
+        existing.reference = baseRef;
+        if (tx.notes && !existing.notes?.includes(tx.notes)) {
+          existing.notes = existing.notes ? `${existing.notes} | ${tx.notes}` : tx.notes;
+        }
+
+        // Merge payout history
+        const existingHistory = existing.payoutHistory || [{
+          id: 'hist-1',
+          amount: existingAmt,
+          date: existing.payoutDate || existing.date,
+          recipient: existing.recipient || 'Partner',
+          notes: existing.notes
+        }];
+        const currentHistory = tx.payoutHistory || [{
+          id: 'hist-2',
+          amount: currentAmt,
+          date: tx.payoutDate || tx.date,
+          recipient: tx.recipient || 'Partner',
+          notes: tx.notes
+        }];
+        existing.payoutHistory = [...existingHistory, ...currentHistory];
+
+        if (tx.id !== existing.id) {
+          toDeleteIds.push(tx.id);
+        }
+      } else {
+        const cleanTx = { ...tx, reference: baseRef };
+        payoutMap.set(key, cleanTx);
+      }
+    } else {
+      nonPayout.push(tx);
+    }
+  }
+
+  // Delete redundant duplicate split cards from Firebase
+  if (isFirebaseConfigured && toDeleteIds.length > 0) {
+    toDeleteIds.forEach(id => deleteTransactionFromFirebase(id));
+  }
+
+  return [...nonPayout, ...Array.from(payoutMap.values())];
+}
 
 interface TransactionStore {
   transactions: Transaction[];
@@ -164,8 +228,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   setReportOpen: (open) => set({ isReportOpen: open }),
 
   setTransactions: (txs) => {
-    set({ transactions: txs, isLoaded: true });
-    saveStorage(txs);
+    const consolidated = consolidatePayoutTransactions(txs);
+    set({ transactions: consolidated, isLoaded: true });
+    saveStorage(consolidated);
   },
 
   initStore: () => {
@@ -188,8 +253,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
     if (isFirebaseConfigured) {
       const unsubscribe = subscribeToTransactions((txs) => {
-        set({ transactions: txs, isLoaded: true });
-        saveStorage(txs);
+        const consolidated = consolidatePayoutTransactions(txs);
+        set({ transactions: consolidated, isLoaded: true });
+        saveStorage(consolidated);
       });
       if (unsubscribe) return unsubscribe;
     }
@@ -200,7 +266,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
-            set({ transactions: parsed, isLoaded: true });
+            const consolidated = consolidatePayoutTransactions(parsed);
+            set({ transactions: consolidated, isLoaded: true });
             return () => {};
           }
         }
@@ -246,9 +313,165 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     const tx = get().transactions.find(t => t.id === id);
     if (!tx) return;
 
+    const today = new Date().toISOString().split('T')[0];
     const currentLastRate = get().lastEurRate;
-    const extraCreatedTxs: Transaction[] = [];
+    const baseRef = cleanReference(tx.reference);
+    const eurR = extraData.eurRate || tx.eurRate || currentLastRate || 10.85;
 
+    if (extraData.eurRate && !isNaN(extraData.eurRate) && extraData.eurRate > 0) {
+      get().setLastEurRate(extraData.eurRate);
+    }
+
+    // SPECIAL HANDLING: Moving from CIH Bank to Final Payout with single-card accumulation
+    if (targetStage === 'final_payout' && tx.status === 'settled_cih') {
+      const currentCih = tx.cihAmount ?? (tx.kastAmount * (tx.exchangeRate || 9.90));
+      const payoutMAD = extraData.payoutAmount ?? currentCih;
+      const remainingMAD = Number((currentCih - payoutMAD).toFixed(2));
+      const recipient = extraData.recipient || (tx.account === 'adnan' ? 'Adnan' : tx.account === 'zouhir' ? 'Zouhir' : 'Hicham');
+      
+      const newInstallment: PayoutInstallment = {
+        id: 'inst-' + Date.now(),
+        amount: payoutMAD,
+        date: extraData.payoutDate || today,
+        recipient: recipient,
+        method: extraData.payoutMethod || 'Bank Transfer / Cash',
+        notes: extraData.notes
+      };
+
+      // Check if a Final Payout card for this transaction already exists
+      const existingPayoutCard = get().transactions.find(t => 
+        t.status === 'final_payout' && 
+        t.account === tx.account && 
+        cleanReference(t.reference) === baseRef
+      );
+
+      let nextTransactions: Transaction[] = [];
+      let txToSave: Transaction[] = [];
+      let txToDeleteIds: string[] = [];
+
+      if (existingPayoutCard) {
+        // Accumulate onto existing Final Payout card
+        const updatedTotal = Number(((existingPayoutCard.payoutAmount || 0) + payoutMAD).toFixed(2));
+        const updatedHistory = [...(existingPayoutCard.payoutHistory || []), newInstallment];
+
+        const updatedPayoutCard: Transaction = {
+          ...existingPayoutCard,
+          payoutAmount: updatedTotal,
+          cihAmount: updatedTotal,
+          eurRate: eurR,
+          eurAmount: Number((updatedTotal / eurR).toFixed(2)),
+          recipient: recipient,
+          payoutDate: extraData.payoutDate || today,
+          payoutMethod: extraData.payoutMethod || existingPayoutCard.payoutMethod,
+          payoutHistory: updatedHistory,
+          updatedAt: Date.now(),
+        };
+
+        txToSave.push(updatedPayoutCard);
+
+        if (remainingMAD > 0.01) {
+          // Update CIH Card with remaining balance
+          const updatedCihCard: Transaction = {
+            ...tx,
+            cihAmount: remainingMAD,
+            eurRate: eurR,
+            eurAmount: Number((remainingMAD / eurR).toFixed(2)),
+            reference: `${baseRef} (Remaining)`,
+            notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left)`,
+            updatedAt: Date.now(),
+          };
+
+          txToSave.push(updatedCihCard);
+
+          nextTransactions = get().transactions.map(t => {
+            if (t.id === existingPayoutCard.id) return updatedPayoutCard;
+            if (t.id === tx.id) return updatedCihCard;
+            return t;
+          });
+        } else {
+          // 0 remaining in CIH: remove CIH card completely
+          txToDeleteIds.push(tx.id);
+          nextTransactions = get().transactions
+            .filter(t => t.id !== tx.id)
+            .map(t => (t.id === existingPayoutCard.id ? updatedPayoutCard : t));
+        }
+      } else {
+        // No existing Final Payout card -> create ONE card in Final Payout
+        if (remainingMAD > 0.01) {
+          const newPayoutCard: Transaction = {
+            id: 'tx-payout-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+            account: tx.account,
+            date: tx.date,
+            source: tx.source,
+            reference: baseRef,
+            status: 'final_payout',
+            cihAmount: payoutMAD,
+            payoutAmount: payoutMAD,
+            eurRate: eurR,
+            eurAmount: Number((payoutMAD / eurR).toFixed(2)),
+            recipient: recipient,
+            payoutDate: extraData.payoutDate || today,
+            payoutMethod: extraData.payoutMethod || 'Bank Transfer / Cash',
+            payoutHistory: [newInstallment],
+            notes: extraData.notes || '',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+
+          const updatedCihCard: Transaction = {
+            ...tx,
+            cihAmount: remainingMAD,
+            eurRate: eurR,
+            eurAmount: Number((remainingMAD / eurR).toFixed(2)),
+            reference: `${baseRef} (Remaining)`,
+            notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left)`,
+            updatedAt: Date.now(),
+          };
+
+          txToSave.push(newPayoutCard, updatedCihCard);
+
+          nextTransactions = [
+            newPayoutCard,
+            ...get().transactions.map(t => (t.id === tx.id ? updatedCihCard : t))
+          ];
+        } else {
+          // Full 100% payout in one go -> transform CIH card into Final Payout card
+          const fullPayoutCard: Transaction = {
+            ...tx,
+            status: 'final_payout',
+            reference: baseRef,
+            cihAmount: payoutMAD,
+            payoutAmount: payoutMAD,
+            eurRate: eurR,
+            eurAmount: Number((payoutMAD / eurR).toFixed(2)),
+            recipient: recipient,
+            payoutDate: extraData.payoutDate || today,
+            payoutMethod: extraData.payoutMethod || 'Bank Transfer / Cash',
+            payoutHistory: [newInstallment],
+            updatedAt: Date.now(),
+          };
+
+          txToSave.push(fullPayoutCard);
+
+          nextTransactions = get().transactions.map(t => (t.id === tx.id ? fullPayoutCard : t));
+        }
+      }
+
+      set({ transactions: nextTransactions, moveModalTx: null });
+      saveStorage(nextTransactions);
+
+      if (isFirebaseConfigured) {
+        for (const item of txToSave) {
+          await saveTransactionToFirebase(item);
+        }
+        for (const delId of txToDeleteIds) {
+          await deleteTransactionFromFirebase(delId);
+        }
+      }
+      return;
+    }
+
+    // Standard moves for other stages (KAST -> Binance -> CIH)
     const updated = get().transactions.map(t => {
       if (t.id === id) {
         const merged: Transaction = {
@@ -269,66 +492,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           merged.exchangeRate = rate;
           const cihMAD = extraData.cihAmount ?? Number((baseUSD * rate).toFixed(2));
           merged.cihAmount = cihMAD;
-          
-          // Euro manual conversion
-          const eurR = extraData.eurRate || t.eurRate || currentLastRate || 10.85;
           merged.eurRate = eurR;
           merged.eurAmount = extraData.eurAmount ?? Number((cihMAD / eurR).toFixed(2));
-        }
-
-        if (targetStage === 'final_payout') {
-          const currentCih = t.cihAmount ?? (t.kastAmount * (t.exchangeRate || 9.90));
-          const payoutMAD = extraData.payoutAmount ?? currentCih;
-          const eurR = extraData.eurRate || t.eurRate || currentLastRate || 10.85;
-
-          const isPartial = currentCih > 0 && payoutMAD > 0 && (currentCih - payoutMAD) >= 0.01;
-
-          if (isPartial) {
-            const remainingMAD = Number((currentCih - payoutMAD).toFixed(2));
-            const exRate = t.exchangeRate || 9.90;
-            const refBase = t.reference || t.source || 'GB-Payout';
-
-            // 1. Current transaction becomes the Paid Out portion
-            merged.status = 'final_payout';
-            merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
-            merged.cihAmount = payoutMAD;
-            merged.payoutAmount = payoutMAD;
-            merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
-            merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
-            merged.eurRate = eurR;
-            merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
-            merged.reference = `${refBase} (Paid)`;
-
-            // 2. Create the remaining portion that stays in CIH Bank
-            const remainingTx: Transaction = {
-              id: 'tx-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
-              account: t.account,
-              date: t.date,
-              source: t.source,
-              reference: `${refBase.replace(' (Remaining)', '')} (Remaining)`,
-              kastAmount: Number((remainingMAD / exRate).toFixed(2)),
-              binanceAmount: Number((remainingMAD / exRate).toFixed(2)),
-              status: 'settled_cih',
-              exchangeRate: exRate,
-              cihAmount: remainingMAD,
-              eurRate: eurR,
-              eurAmount: Number((remainingMAD / eurR).toFixed(2)),
-              notes: `Remaining balance from ${refBase}`,
-              createdAt: Date.now() + 1,
-              updatedAt: Date.now() + 1,
-            };
-
-            extraCreatedTxs.push(remainingTx);
-          } else {
-            // Full Payout
-            merged.status = 'final_payout';
-            merged.recipient = extraData.recipient || (t.account === 'adnan' ? 'Adnan' : t.account === 'zouhir' ? 'Zouhir' : 'Hicham');
-            merged.payoutAmount = payoutMAD;
-            merged.payoutDate = extraData.payoutDate || new Date().toISOString().split('T')[0];
-            merged.payoutMethod = extraData.payoutMethod || 'Cash / Bank Transfer';
-            merged.eurRate = eurR;
-            merged.eurAmount = Number((payoutMAD / eurR).toFixed(2));
-          }
         }
 
         if (targetStage === 'transferred_to_hicham') {
@@ -344,20 +509,12 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       return t;
     });
 
-    if (extraData.eurRate && !isNaN(extraData.eurRate) && extraData.eurRate > 0) {
-      get().setLastEurRate(extraData.eurRate);
-    }
+    set({ transactions: updated, moveModalTx: null });
+    saveStorage(updated);
 
-    const finalTransactions = [...extraCreatedTxs, ...updated];
-    set({ transactions: finalTransactions, moveModalTx: null });
-    saveStorage(finalTransactions);
-
-    if (isFirebaseConfigured) {
-      const changed = finalTransactions.find(t => t.id === id);
-      if (changed) await saveTransactionToFirebase(changed);
-      for (const extra of extraCreatedTxs) {
-        await saveTransactionToFirebase(extra);
-      }
+    const changed = updated.find(t => t.id === id);
+    if (changed && isFirebaseConfigured) {
+      await saveTransactionToFirebase(changed);
     }
   },
 
