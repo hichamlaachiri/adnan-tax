@@ -405,6 +405,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             source: tx.source,
             reference: baseRef,
             status: 'final_payout',
+            kastAmount: Number((payoutMAD / (tx.exchangeRate || 9.90)).toFixed(2)),
             cihAmount: payoutMAD,
             payoutAmount: payoutMAD,
             eurRate: eurR,
