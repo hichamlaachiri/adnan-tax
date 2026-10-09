@@ -103,6 +103,56 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
     }
   }
 
+  // Check if any CIH transactions were split but lack an active Final Payout card in the map
+  for (const nonP of nonPayout) {
+    if (nonP.status === 'settled_cih' || nonP.status === 'transferred_to_hicham') {
+      const baseRef = cleanReference(nonP.reference || nonP.originReference || nonP.source);
+      const key = `${nonP.account}_${baseRef}`;
+      const origTotal = nonP.originalCihAmount || 0;
+      const currentCih = nonP.cihAmount || 0;
+      const paidDiff = origTotal > currentCih ? Number((origTotal - currentCih).toFixed(2)) : 0;
+
+      if (paidDiff > 0.01 && !payoutMap.has(key)) {
+        const rate = nonP.eurRate || 10.85;
+        const autoPayoutCard: Transaction = {
+          id: `tx-payout-auto-${nonP.id}`,
+          account: nonP.account,
+          date: nonP.date,
+          source: nonP.source,
+          reference: baseRef,
+          originReference: baseRef,
+          originalCihAmount: origTotal,
+          remainingCihAmount: currentCih,
+          totalPaidOutMAD: paidDiff,
+          isSplit: true,
+          status: 'final_payout',
+          kastAmount: Number((paidDiff / (nonP.exchangeRate || 9.90)).toFixed(2)),
+          cihAmount: paidDiff,
+          payoutAmount: paidDiff,
+          eurRate: rate,
+          eurAmount: Number((paidDiff / rate).toFixed(2)),
+          recipient: nonP.recipient || (nonP.account === 'adnan' ? 'Adnan' : nonP.account === 'zouhir' ? 'Zouhir' : 'Hicham'),
+          payoutDate: nonP.payoutDate || nonP.date,
+          payoutMethod: nonP.payoutMethod || 'Bank Transfer / Cash',
+          payoutHistory: [{
+            id: 'inst-auto-1',
+            amount: paidDiff,
+            date: nonP.payoutDate || nonP.date,
+            recipient: nonP.recipient || (nonP.account === 'adnan' ? 'Adnan' : nonP.account === 'zouhir' ? 'Zouhir' : 'Hicham'),
+            originReference: baseRef,
+            orderTotal: origTotal,
+            notes: `Split payment from ${baseRef}`
+          }],
+          notes: `Split payment from ${baseRef}`,
+          createdAt: nonP.createdAt || Date.now(),
+          updatedAt: Date.now(),
+        };
+
+        payoutMap.set(key, autoPayoutCard);
+      }
+    }
+  }
+
   // Delete redundant duplicate split cards from Firebase
   if (isFirebaseConfigured && toDeleteIds.length > 0) {
     toDeleteIds.forEach(id => deleteTransactionFromFirebase(id));

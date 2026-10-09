@@ -270,6 +270,16 @@ export const KanbanBoard: React.FC = () => {
                   const fee = tx.binanceFee ?? (tx.binanceAmount ? Number((tx.kastAmount - tx.binanceAmount).toFixed(2)) : 0);
                   const effectiveRate = tx.eurRate || lastEurRate || 10.85;
 
+                  const isCihCol = col.id === 'settled_cih';
+                  const isPayoutCol = col.id === 'final_payout';
+                  const origOrderTotal = tx.originalCihAmount || (isCihCol ? (tx.cihAmount || 0) + (tx.totalPaidOutMAD || 0) : (tx.payoutAmount || tx.cihAmount || 0));
+                  const currentCardAmt = isCihCol ? (tx.cihAmount || 0) : (tx.payoutAmount || tx.cihAmount || 0);
+                  const paidMAD = isPayoutCol ? currentCardAmt : (tx.totalPaidOutMAD || (origOrderTotal > currentCardAmt ? Number((origOrderTotal - currentCardAmt).toFixed(2)) : 0));
+                  const cihMAD = isCihCol ? currentCardAmt : (tx.remainingCihAmount !== undefined ? tx.remainingCihAmount : (origOrderTotal > currentCardAmt ? Number((origOrderTotal - currentCardAmt).toFixed(2)) : 0));
+                  const hasSplitActivity = (origOrderTotal > 0 && paidMAD > 0 && (cihMAD > 0 || isPayoutCol)) || tx.isSplit;
+                  const paidPercent = origOrderTotal > 0 ? Math.min(100, Math.max(0, Math.round((paidMAD / origOrderTotal) * 100))) : 0;
+                  const cihPercent = 100 - paidPercent;
+
                   return (
                     <div
                       key={tx.id}
@@ -308,17 +318,15 @@ export const KanbanBoard: React.FC = () => {
                       </div>
 
                       {/* CIH Bank: Show Split Remaining Indicator if partially paid */}
-                      {col.id === 'settled_cih' && (tx.isSplit || tx.reference?.includes('(Remaining)') || (tx.originalCihAmount && tx.originalCihAmount > (tx.cihAmount || 0))) && (
+                      {col.id === 'settled_cih' && hasSplitActivity && (
                         <div className="mt-1.5 px-2 py-1 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between text-[10px]">
                           <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
                             <Split className="w-3 h-3" />
                             <span>Split: {cleanReference(tx.reference)}</span>
                           </span>
-                          {tx.originalCihAmount && (
-                            <span className="text-slate-500 dark:text-slate-400 font-mono text-[9px]">
-                              Total: <strong className="text-slate-700 dark:text-slate-300">{formatMAD(tx.originalCihAmount)}</strong>
-                            </span>
-                          )}
+                          <span className="text-slate-500 dark:text-slate-400 font-mono text-[9px]">
+                            Total: <strong className="text-slate-700 dark:text-slate-300">{formatMAD(origOrderTotal)}</strong>
+                          </span>
                         </div>
                       )}
 
@@ -334,15 +342,38 @@ export const KanbanBoard: React.FC = () => {
                               {cleanReference(tx.reference || tx.originReference)}
                             </span>
                           </div>
+                        </div>
+                      )}
 
-                          {tx.originalCihAmount && tx.originalCihAmount > (tx.payoutAmount || tx.cihAmount || 0) && (
-                            <div className="pt-1 border-t border-purple-200/60 dark:border-purple-800/60 text-[10px] flex items-center justify-between text-slate-500 dark:text-slate-400">
-                              <span>Order Total: <strong className="font-mono text-slate-700 dark:text-slate-300">{formatMAD(tx.originalCihAmount)}</strong></span>
-                              {tx.remainingCihAmount !== undefined && tx.remainingCihAmount > 0 ? (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-mono text-[9px]">({formatMAD(tx.remainingCihAmount)} in CIH)</span>
-                              ) : null}
-                            </div>
-                          )}
+                      {/* Visual Dual-Tone Split Allocation Bar for Split Cards */}
+                      {(isCihCol || isPayoutCol) && hasSplitActivity && (
+                        <div className="mt-2 space-y-1.5 bg-slate-100/90 dark:bg-slate-900/90 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                          <div className="flex items-center justify-between text-[10px] font-bold">
+                            <span className="text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                              <span>Paid: {formatMAD(paidMAD)}</span>
+                            </span>
+                            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>CIH: {formatMAD(cihMAD)}</span>
+                            </span>
+                          </div>
+
+                          <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                            <div 
+                              style={{ width: `${paidPercent}%` }} 
+                              className="bg-purple-500 h-full transition-all"
+                            />
+                            <div 
+                              style={{ width: `${cihPercent}%` }} 
+                              className="bg-emerald-500 h-full transition-all"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[9px] text-slate-400 pt-0.5">
+                            <span>Total: <strong className="text-slate-600 dark:text-slate-300 font-mono">{formatMAD(origOrderTotal)}</strong></span>
+                            <span className="font-bold text-purple-600 dark:text-purple-400">{paidPercent}% Delivered</span>
+                          </div>
                         </div>
                       )}
 
