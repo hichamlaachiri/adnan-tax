@@ -57,6 +57,28 @@ export interface Translations {
   statusCIH: string;
   statusPayout: string;
   recipient: string;
+  
+  // Split & Visual progress terms
+  splitActive: string;
+  fromOrder: string;
+  orderTotal: string;
+  paid: string;
+  cihRemaining: string;
+  delivered: string;
+  installmentsHistory: string;
+  paymentNumber: string;
+  viewHistory: string;
+  hideHistory: string;
+  autoSplitTitle: string;
+  payoutTo: string;
+  leftInCIH: string;
+  confirmSplit: string;
+  full100: string;
+  half50: string;
+  officialReport: string;
+  totalRecords: string;
+  totalSettled: string;
+  editEurRate: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -117,6 +139,28 @@ export const translations: Record<Language, Translations> = {
     statusCIH: 'In CIH Bank',
     statusPayout: 'Paid Out',
     recipient: 'Recipient',
+    
+    // Split & Visual progress terms
+    splitActive: 'Split Active',
+    fromOrder: 'From Order:',
+    orderTotal: 'Order Total:',
+    paid: 'Paid',
+    cihRemaining: 'In CIH',
+    delivered: 'Delivered',
+    installmentsHistory: 'Installments History',
+    paymentNumber: 'Payment',
+    viewHistory: 'View History',
+    hideHistory: 'Hide History',
+    autoSplitTitle: 'Auto-Split: Partial Payout',
+    payoutTo: 'Payout to',
+    leftInCIH: 'Left in CIH Bank',
+    confirmSplit: 'Confirm Split Payout',
+    full100: '100% Full',
+    half50: '50% Half',
+    officialReport: 'Official Report',
+    totalRecords: 'Total Records:',
+    totalSettled: 'Settled',
+    editEurRate: 'Click to edit EUR exchange rate',
   },
   es: {
     allAccounts: 'Todos los perfiles',
@@ -175,6 +219,28 @@ export const translations: Record<Language, Translations> = {
     statusCIH: 'En CIH Bank',
     statusPayout: 'Pagado',
     recipient: 'Destinatario',
+    
+    // Split & Visual progress terms
+    splitActive: 'División Activa',
+    fromOrder: 'De la Orden:',
+    orderTotal: 'Total de la Orden:',
+    paid: 'Pagado',
+    cihRemaining: 'En CIH',
+    delivered: 'Entregado',
+    installmentsHistory: 'Historial de Pagos',
+    paymentNumber: 'Pago',
+    viewHistory: 'Ver Historial',
+    hideHistory: 'Ocultar Historial',
+    autoSplitTitle: 'División Automática: Pago Parcial',
+    payoutTo: 'Pago a',
+    leftInCIH: 'Restante en CIH Bank',
+    confirmSplit: 'Confirmar Pago Dividido',
+    full100: '100% Total',
+    half50: '50% Mitad',
+    officialReport: 'Informe Oficial',
+    totalRecords: 'Total de Registros:',
+    totalSettled: 'Liquidado',
+    editEurRate: 'Clic para editar tasa EUR',
   },
   ar: {
     allAccounts: 'جميع الحسابات',
@@ -233,5 +299,27 @@ export const translations: Record<Language, Translations> = {
     statusCIH: 'في بنك CIH',
     statusPayout: 'تم التسليم',
     recipient: 'المستفيد',
+    
+    // Split & Visual progress terms
+    splitActive: 'تقسيم نشط',
+    fromOrder: 'من الطلب:',
+    orderTotal: 'مجموع الطلب:',
+    paid: 'مدفوع',
+    cihRemaining: 'في CIH',
+    delivered: 'تم التسليم',
+    installmentsHistory: 'سجل الدفعات',
+    paymentNumber: 'دفعة',
+    viewHistory: 'عرض السجل',
+    hideHistory: 'إخفاء السجل',
+    autoSplitTitle: 'تقسيم تلقائي: دفعة جزئية',
+    payoutTo: 'دفع إلى',
+    leftInCIH: 'المتبقي في بنك CIH',
+    confirmSplit: 'تأكيد دفع القسط',
+    full100: '100% كامل',
+    half50: '50% النصف',
+    officialReport: 'تقرير رسمي',
+    totalRecords: 'إجمالي السجلات:',
+    totalSettled: 'تمت تسويته',
+    editEurRate: 'اضغط لتعديل سعر صرف اليورو',
   },
 };

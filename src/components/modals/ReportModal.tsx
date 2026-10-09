@@ -101,7 +101,7 @@ export const ReportModal: React.FC = () => {
             </div>
             <div className="text-right">
               <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                Official Report
+                {dict.officialReport}
               </span>
             </div>
           </div>
@@ -133,7 +133,7 @@ export const ReportModal: React.FC = () => {
             </div>
 
             <div className="p-3 bg-purple-50/50 dark:bg-purple-950/30 rounded-xl border border-purple-200 dark:border-purple-800">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600">4. Paid Out (MAD / EUR)</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600">4. {dict.totalPayout} (MAD / EUR)</span>
               <div className="text-base font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
                 {formatMAD(metrics.totalFinalPayoutMAD)}
               </div>
@@ -148,14 +148,14 @@ export const ReportModal: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Account</th>
-                  <th className="py-2.5 px-3">Ref #</th>
+                  <th className="py-2.5 px-3">{dict.date}</th>
+                  <th className="py-2.5 px-3">{dict.accountProfile}</th>
+                  <th className="py-2.5 px-3">{dict.refVoucher}</th>
                   <th className="py-2.5 px-3 text-right">KAST (USD)</th>
                   <th className="py-2.5 px-3 text-right">Binance Net</th>
                   <th className="py-2.5 px-3 text-right">CIH (MAD)</th>
                   <th className="py-2.5 px-3 text-right">EUR Value</th>
-                  <th className="py-2.5 px-3">Recipient</th>
+                  <th className="py-2.5 px-3">{dict.recipient}</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
                 </tr>
               </thead>
@@ -201,11 +201,11 @@ export const ReportModal: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {tx.status === 'in_kast' && '1. In KAST'}
-                            {tx.status === 'in_binance' && '2. In Binance'}
-                            {tx.status === 'settled_cih' && '3. In CIH Bank'}
-                            {tx.status === 'final_payout' && '4. Paid Out'}
-                            {tx.status === 'transferred_to_hicham' && '→ Hicham'}
+                            {tx.status === 'in_kast' && `1. ${dict.statusKast}`}
+                            {tx.status === 'in_binance' && `2. ${dict.statusBinance}`}
+                            {tx.status === 'settled_cih' && `3. ${dict.statusCIH}`}
+                            {tx.status === 'final_payout' && `4. ${dict.statusPayout}`}
+                            {tx.status === 'transferred_to_hicham' && dict.toHicham}
                           </span>
                         </td>
                       </tr>
@@ -218,7 +218,7 @@ export const ReportModal: React.FC = () => {
 
           {/* Report Footer */}
           <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <span>Total Records: {transactions.length}</span>
+            <span>{dict.totalRecords} {transactions.length}</span>
             <span>TaxFree Flow Tracker System</span>
           </div>
         </div>

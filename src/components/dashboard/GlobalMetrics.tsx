@@ -124,7 +124,7 @@ export const GlobalMetrics: React.FC = () => {
             </div>
           </div>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-100 dark:border-purple-800">
-            Delivered
+            {dict.delivered}
           </span>
         </div>
 

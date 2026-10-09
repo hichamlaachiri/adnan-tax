@@ -347,14 +347,14 @@ export const MoveStageModal: React.FC = () => {
                       onClick={() => setPayoutAmount(maxAvailableInCIH.toString())}
                       className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-950/50 text-slate-600 dark:text-slate-300 hover:text-purple-600 font-semibold transition-all cursor-pointer"
                     >
-                      100% Full ({formatMAD(maxAvailableInCIH)})
+                      {dict.full100} ({formatMAD(maxAvailableInCIH)})
                     </button>
                     <button
                       type="button"
                       onClick={() => setPayoutAmount(Math.floor(maxAvailableInCIH / 2).toString())}
                       className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-950/50 text-slate-600 dark:text-slate-300 hover:text-purple-600 font-semibold transition-all cursor-pointer"
                     >
-                      50% ({formatMAD(Math.floor(maxAvailableInCIH / 2))})
+                      {dict.half50} ({formatMAD(Math.floor(maxAvailableInCIH / 2))})
                     </button>
                   </div>
                 )}
@@ -366,17 +366,17 @@ export const MoveStageModal: React.FC = () => {
                   <div className="flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-400">
                     <div className="flex items-center gap-1.5">
                       <Split className="w-3.5 h-3.5" />
-                      <span>Split Payout (Daf3a Joz&apos;iya)</span>
+                      <span>{dict.autoSplitTitle}</span>
                     </div>
                     <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/20 rounded-md text-amber-700 dark:text-amber-300">
-                      Order: {tx.reference}
+                      {dict.fromOrder} {tx.reference}
                     </span>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-amber-500/20">
                     <div className="bg-white/70 dark:bg-slate-900/70 p-2 rounded-lg border border-amber-500/20">
                       <span className="text-purple-600 dark:text-purple-400 block text-[10px] font-bold">
-                        → Payout to {recipient || 'Partner'}:
+                        → {dict.payoutTo} {recipient || 'Partner'}:
                       </span>
                       <span className="font-extrabold font-mono text-purple-600 dark:text-purple-400 text-xs block">
                         {formatMAD(currentPayoutVal)}
@@ -388,7 +388,7 @@ export const MoveStageModal: React.FC = () => {
 
                     <div className="bg-white/70 dark:bg-slate-900/70 p-2 rounded-lg border border-amber-500/20">
                       <span className="text-emerald-600 dark:text-emerald-400 block text-[10px] font-bold">
-                        → Left in CIH Bank:
+                        → {dict.leftInCIH}:
                       </span>
                       <span className="font-extrabold font-mono text-emerald-600 dark:text-emerald-400 text-xs block">
                         {formatMAD(remainingVal)}
@@ -398,10 +398,6 @@ export const MoveStageModal: React.FC = () => {
                       </span>
                     </div>
                   </div>
-
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                    ✓ The Final Payout card will be clearly linked to <strong>{tx.reference}</strong>.
-                  </p>
                 </div>
               )}
 
@@ -439,7 +435,7 @@ export const MoveStageModal: React.FC = () => {
                   : 'bg-purple-600 hover:bg-purple-700'
               }`}
             >
-              {isPartialSplit ? 'Confirm Split Payout' : dict.confirmMove}
+              {isPartialSplit ? dict.confirmSplit : dict.confirmMove}
             </button>
           </div>
         </form>

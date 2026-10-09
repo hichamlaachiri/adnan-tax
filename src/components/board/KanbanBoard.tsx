@@ -13,7 +13,12 @@ import {
   Trash2, 
   GripVertical,
   Pencil,
-  Split
+  Split,
+  History,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Calendar
 } from 'lucide-react';
 
 interface InlineEurRateProps {
@@ -21,6 +26,7 @@ interface InlineEurRateProps {
   madAmount: number;
   currentRate: number;
   onUpdate: (id: string, rate: number) => void;
+  editTitle?: string;
 }
 
 const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
@@ -28,6 +34,7 @@ const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
   madAmount,
   currentRate,
   onUpdate,
+  editTitle,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [rateVal, setRateVal] = useState(currentRate.toString());
@@ -87,7 +94,7 @@ const InlineEurRateEditor: React.FC<InlineEurRateProps> = ({
             e.stopPropagation();
             setIsEditing(true);
           }}
-          title="Click to edit EUR exchange rate"
+          title={editTitle || 'Click to edit EUR exchange rate'}
           className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 px-1.5 py-0.5 rounded-md border border-blue-200/80 dark:border-blue-800 transition-all cursor-pointer group/rate active:scale-95"
         >
           <span>{currentRate} MAD/EUR</span>
@@ -102,17 +109,18 @@ export const KanbanBoard: React.FC = () => {
   const { 
     getFilteredTransactions, 
     openQuickAdd, 
-    openMoveModal,
-    deleteTransaction,
-    updateEurRate,
-    lastEurRate,
-    t
+    openMoveModal, 
+    deleteTransaction, 
+    updateEurRate, 
+    lastEurRate, 
+    t 
   } = useTransactionStore();
 
   const transactions = getFilteredTransactions();
   const dict = t();
   const [draggedTxId, setDraggedTxId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<PipelineStatus | null>(null);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   const columns: {
     id: PipelineStatus;
@@ -317,15 +325,15 @@ export const KanbanBoard: React.FC = () => {
                         )}
                       </div>
 
-                      {/* CIH Bank: Show Split Remaining Indicator if partially paid */}
+                      {/* CIH Bank: Show Split Remaining Indicator pill (NO progress bar as requested) */}
                       {col.id === 'settled_cih' && hasSplitActivity && (
                         <div className="mt-1.5 px-2 py-1 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between text-[10px]">
                           <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
                             <Split className="w-3 h-3" />
-                            <span>Split: {cleanReference(tx.reference)}</span>
+                            <span>{dict.splitActive}: {cleanReference(tx.reference)}</span>
                           </span>
                           <span className="text-slate-500 dark:text-slate-400 font-mono text-[9px]">
-                            Total: <strong className="text-slate-700 dark:text-slate-300">{formatMAD(origOrderTotal)}</strong>
+                            {dict.orderTotal} <strong className="text-slate-700 dark:text-slate-300">{formatMAD(origOrderTotal)}</strong>
                           </span>
                         </div>
                       )}
@@ -336,7 +344,7 @@ export const KanbanBoard: React.FC = () => {
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
                               <Split className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-                              <span>From Order:</span>
+                              <span>{dict.fromOrder}</span>
                             </span>
                             <span className="text-[11px] font-mono font-extrabold text-purple-700 dark:text-purple-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-700">
                               {cleanReference(tx.reference || tx.originReference)}
@@ -345,17 +353,17 @@ export const KanbanBoard: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Visual Dual-Tone Split Allocation Bar for Split Cards */}
-                      {(isCihCol || isPayoutCol) && hasSplitActivity && (
+                      {/* Final Payout ONLY: Visual Dual-Tone Split Allocation Bar */}
+                      {isPayoutCol && hasSplitActivity && (
                         <div className="mt-2 space-y-1.5 bg-slate-100/90 dark:bg-slate-900/90 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <div className="flex items-center justify-between text-[10px] font-bold">
                             <span className="text-purple-600 dark:text-purple-400 flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                              <span>Paid: {formatMAD(paidMAD)}</span>
+                              <span>{dict.paid}: {formatMAD(paidMAD)}</span>
                             </span>
                             <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              <span>CIH: {formatMAD(cihMAD)}</span>
+                              <span>{dict.cihRemaining}: {formatMAD(cihMAD)}</span>
                             </span>
                           </div>
 
@@ -371,8 +379,8 @@ export const KanbanBoard: React.FC = () => {
                           </div>
 
                           <div className="flex items-center justify-between text-[9px] text-slate-400 pt-0.5">
-                            <span>Total: <strong className="text-slate-600 dark:text-slate-300 font-mono">{formatMAD(origOrderTotal)}</strong></span>
-                            <span className="font-bold text-purple-600 dark:text-purple-400">{paidPercent}% Delivered</span>
+                            <span>{dict.orderTotal} <strong className="text-slate-600 dark:text-slate-300 font-mono">{formatMAD(origOrderTotal)}</strong></span>
+                            <span className="font-bold text-purple-600 dark:text-purple-400">{paidPercent}% {dict.delivered}</span>
                           </div>
                         </div>
                       )}
@@ -423,6 +431,7 @@ export const KanbanBoard: React.FC = () => {
                               madAmount={tx.cihAmount || 0}
                               currentRate={effectiveRate}
                               onUpdate={updateEurRate}
+                              editTitle={dict.editEurRate}
                             />
                           </div>
                         )}
@@ -434,29 +443,76 @@ export const KanbanBoard: React.FC = () => {
                             madAmount={tx.payoutAmount || tx.cihAmount || 0}
                             currentRate={effectiveRate}
                             onUpdate={updateEurRate}
+                            editTitle={dict.editEurRate}
                           />
                         )}
 
-                        {/* Final Payout Installments History Breakdown */}
-                        {col.id === 'final_payout' && tx.payoutHistory && tx.payoutHistory.length > 1 && (
-                          <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                            <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 flex items-center justify-between">
-                              <span>{tx.payoutHistory.length} Installments:</span>
-                              <span className="font-mono">{formatMAD(tx.payoutAmount || 0)}</span>
-                            </div>
-                            <div className="space-y-0.5">
-                              {tx.payoutHistory.map((inst, idx) => (
-                                <div key={inst.id || idx} className="text-[10px] flex items-center justify-between text-slate-500 dark:text-slate-400">
-                                  <span>• Daf3a {idx + 1} {inst.recipient ? `(${inst.recipient})` : ''}:</span>
-                                  <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                                    {formatMAD(inst.amount)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
+                        {/* Final Payout: Clickable Installments History Drawer */}
+                        {col.id === 'final_payout' && (
+                          <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                            {/* Expandable History Toggle Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedHistoryId(expandedHistoryId === tx.id ? null : tx.id);
+                              }}
+                              className="w-full flex items-center justify-between px-2 py-1 bg-purple-50/70 hover:bg-purple-100/90 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 rounded-lg text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60 transition-all cursor-pointer"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <History className="w-3 h-3 text-purple-600" />
+                                <span>{dict.installmentsHistory} ({tx.payoutHistory?.length || 1})</span>
+                              </span>
+                              {expandedHistoryId === tx.id ? (
+                                <ChevronUp className="w-3 h-3 opacity-70" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 opacity-70" />
+                              )}
+                            </button>
+
+                            {/* Expanded History Breakdown */}
+                            {expandedHistoryId === tx.id && (
+                              <div className="mt-1.5 space-y-1.5 p-2 bg-white dark:bg-slate-900/90 rounded-xl border border-purple-200 dark:border-purple-800 text-[10px]">
+                                {(tx.payoutHistory && tx.payoutHistory.length > 0 ? tx.payoutHistory : [{
+                                  id: 'inst-main',
+                                  amount: tx.payoutAmount || tx.cihAmount || 0,
+                                  date: tx.payoutDate || tx.date,
+                                  recipient: tx.recipient || 'Partner',
+                                  method: tx.payoutMethod || 'Cash'
+                                }]).map((inst, idx) => (
+                                  <div key={inst.id || idx} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1">
+                                    <div className="flex items-center justify-between font-bold">
+                                      <span className="text-purple-600 dark:text-purple-400">
+                                        • {dict.paymentNumber} #{idx + 1}
+                                      </span>
+                                      <span className="font-mono text-xs font-black text-slate-900 dark:text-white">
+                                        {formatMAD(inst.amount)}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-1 text-[9px] text-slate-500 dark:text-slate-400">
+                                      <div className="flex items-center gap-1 truncate">
+                                        <User className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                        <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">{inst.recipient || tx.recipient || 'Partner'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 justify-end">
+                                        <Calendar className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                        <span>{formatDate(inst.date)}</span>
+                                      </div>
+                                    </div>
+
+                                    {inst.method && (
+                                      <div className="text-[9px] text-slate-400 font-medium">
+                                        💵 {inst.method}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
-                      </div>
+                      </div> </div>
 
                       {/* Notes if any */}
                       {tx.notes && (

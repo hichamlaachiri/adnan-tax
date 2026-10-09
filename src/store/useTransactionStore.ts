@@ -405,7 +405,6 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       // Check if a Final Payout card for this transaction already exists
       const existingPayoutCard = get().transactions.find(t => 
         t.status === 'final_payout' && 
-        t.account === tx.account && 
         cleanReference(t.reference || t.originReference) === baseRef
       );
 
@@ -416,7 +415,18 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       if (existingPayoutCard) {
         // Accumulate onto existing Final Payout card
         const updatedTotal = Number(((existingPayoutCard.payoutAmount || 0) + payoutMAD).toFixed(2));
-        const updatedHistory = [...(existingPayoutCard.payoutHistory || []), newInstallment];
+        const prevHist: PayoutInstallment[] = (existingPayoutCard.payoutHistory && existingPayoutCard.payoutHistory.length > 0)
+          ? existingPayoutCard.payoutHistory
+          : [{
+              id: 'inst-prev-' + existingPayoutCard.id,
+              amount: existingPayoutCard.payoutAmount || existingPayoutCard.cihAmount || 0,
+              date: existingPayoutCard.payoutDate || existingPayoutCard.date,
+              recipient: existingPayoutCard.recipient || recipient,
+              method: existingPayoutCard.payoutMethod || 'Cash',
+              originReference: baseRef,
+              orderTotal: origTotal,
+            }];
+        const updatedHistory = [...prevHist, newInstallment];
 
         const updatedPayoutCard: Transaction = {
           ...existingPayoutCard,
