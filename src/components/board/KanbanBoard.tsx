@@ -512,7 +512,7 @@ export const KanbanBoard: React.FC = () => {
                             )}
                           </div>
                         )}
-                      </div> </div>
+                      </div>
 
                       {/* Notes if any */}
                       {tx.notes && (
