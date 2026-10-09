@@ -12,7 +12,8 @@ import {
   UserCheck, 
   Trash2, 
   GripVertical,
-  Pencil
+  Pencil,
+  Split
 } from 'lucide-react';
 
 interface InlineEurRateProps {
@@ -290,7 +291,7 @@ export const KanbanBoard: React.FC = () => {
 
                       {/* Reference & Recipient Badge */}
                       <div className="mt-1.5 text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-between">
-                        <span className="truncate">{tx.reference || tx.source}</span>
+                        <span className="truncate">{cleanReference(tx.reference || tx.source)}</span>
                         {tx.recipient && (
                           <span className="text-[10px] font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 shrink-0">
                             👤 {tx.recipient}
@@ -302,6 +303,45 @@ export const KanbanBoard: React.FC = () => {
                           </span>
                         )}
                       </div>
+
+                      {/* CIH Bank: Show Split Remaining Indicator if partially paid */}
+                      {col.id === 'settled_cih' && (tx.isSplit || tx.reference?.includes('(Remaining)') || (tx.originalCihAmount && tx.originalCihAmount > (tx.cihAmount || 0))) && (
+                        <div className="mt-1.5 px-2 py-1 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between text-[10px]">
+                          <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <Split className="w-3 h-3" />
+                            <span>Split: {cleanReference(tx.reference)}</span>
+                          </span>
+                          {tx.originalCihAmount && (
+                            <span className="text-slate-500 dark:text-slate-400 font-mono text-[9px]">
+                              Total: <strong className="text-slate-700 dark:text-slate-300">{formatMAD(tx.originalCihAmount)}</strong>
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Final Payout: Show Prominent Origin Order Badge */}
+                      {col.id === 'final_payout' && (
+                        <div className="mt-1.5 p-2 bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 rounded-xl space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                              <Split className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                              <span>From Order:</span>
+                            </span>
+                            <span className="text-[11px] font-mono font-extrabold text-purple-700 dark:text-purple-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-700">
+                              {cleanReference(tx.reference || tx.originReference)}
+                            </span>
+                          </div>
+
+                          {tx.originalCihAmount && tx.originalCihAmount > (tx.payoutAmount || tx.cihAmount || 0) && (
+                            <div className="pt-1 border-t border-purple-200/60 dark:border-purple-800/60 text-[10px] flex items-center justify-between text-slate-500 dark:text-slate-400">
+                              <span>Order Total: <strong className="font-mono text-slate-700 dark:text-slate-300">{formatMAD(tx.originalCihAmount)}</strong></span>
+                              {tx.remainingCihAmount !== undefined && tx.remainingCihAmount > 0 ? (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-mono text-[9px]">({formatMAD(tx.remainingCihAmount)} in CIH)</span>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Main Amount for this Column */}
                       <div className="mt-2 p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">

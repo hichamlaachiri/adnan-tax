@@ -14,6 +14,8 @@ export interface PayoutInstallment {
   recipient: string;
   method?: string;
   notes?: string;
+  originReference?: string;
+  orderTotal?: number;
 }
 
 export interface Transaction {
@@ -23,6 +25,13 @@ export interface Transaction {
   source: string; // e.g., 'Global Blue Refund'
   reference?: string; // e.g., 'GB-884920'
   parentTxId?: string; // Links split tranches to the original transaction
+  
+  // Origin & Split Tracking
+  isSplit?: boolean;
+  originReference?: string; // e.g. 'GB-85007' or 'Order X'
+  originalCihAmount?: number; // Initial total MAD in CIH before splits (e.g. 30000)
+  remainingCihAmount?: number; // Amount still in CIH (e.g. 20000)
+  totalPaidOutMAD?: number; // Sum of tranches sent to payout (e.g. 10000)
   
   // Step 1: KAST
   kastAmount: number; // USD

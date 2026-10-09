@@ -46,7 +46,7 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
 
   for (const tx of txs) {
     if (tx.status === 'final_payout') {
-      const baseRef = cleanReference(tx.reference);
+      const baseRef = cleanReference(tx.reference || tx.originReference);
       const key = `${tx.account}_${baseRef}`;
 
       if (payoutMap.has(key)) {
@@ -55,11 +55,15 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
         const existingAmt = existing.payoutAmount || existing.cihAmount || 0;
         const totalAmt = Number((existingAmt + currentAmt).toFixed(2));
         const rate = existing.eurRate || tx.eurRate || 10.85;
+        const origTotal = existing.originalCihAmount || tx.originalCihAmount || totalAmt;
 
         existing.payoutAmount = totalAmt;
         existing.cihAmount = totalAmt;
         existing.eurAmount = Number((totalAmt / rate).toFixed(2));
         existing.reference = baseRef;
+        existing.originReference = baseRef;
+        existing.originalCihAmount = origTotal;
+        existing.isSplit = existing.isSplit || tx.isSplit || (origTotal > totalAmt);
         if (tx.notes && !existing.notes?.includes(tx.notes)) {
           existing.notes = existing.notes ? `${existing.notes} | ${tx.notes}` : tx.notes;
         }
@@ -70,6 +74,7 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
           amount: existingAmt,
           date: existing.payoutDate || existing.date,
           recipient: existing.recipient || 'Partner',
+          originReference: baseRef,
           notes: existing.notes
         }];
         const currentHistory = tx.payoutHistory || [{
@@ -77,6 +82,7 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
           amount: currentAmt,
           date: tx.payoutDate || tx.date,
           recipient: tx.recipient || 'Partner',
+          originReference: baseRef,
           notes: tx.notes
         }];
         existing.payoutHistory = [...existingHistory, ...currentHistory];
@@ -85,7 +91,11 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
           toDeleteIds.push(tx.id);
         }
       } else {
-        const cleanTx = { ...tx, reference: baseRef };
+        const cleanTx = { 
+          ...tx, 
+          reference: baseRef,
+          originReference: tx.originReference || baseRef
+        };
         payoutMap.set(key, cleanTx);
       }
     } else {
@@ -322,12 +332,14 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       get().setLastEurRate(extraData.eurRate);
     }
 
-    // SPECIAL HANDLING: Moving from CIH Bank to Final Payout with single-card accumulation
+    // SPECIAL HANDLING: Moving from CIH Bank to Final Payout with single-card accumulation and crystal-clear split tracking
     if (targetStage === 'final_payout' && tx.status === 'settled_cih') {
       const currentCih = tx.cihAmount ?? (tx.kastAmount * (tx.exchangeRate || 9.90));
       const payoutMAD = extraData.payoutAmount ?? currentCih;
       const remainingMAD = Number((currentCih - payoutMAD).toFixed(2));
       const recipient = extraData.recipient || (tx.account === 'adnan' ? 'Adnan' : tx.account === 'zouhir' ? 'Zouhir' : 'Hicham');
+      const origTotal = tx.originalCihAmount || currentCih;
+      const isSplitNow = remainingMAD > 0.01 || (tx.isSplit ?? false) || (origTotal > payoutMAD);
       
       const newInstallment: PayoutInstallment = {
         id: 'inst-' + Date.now(),
@@ -335,6 +347,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         date: extraData.payoutDate || today,
         recipient: recipient,
         method: extraData.payoutMethod || 'Bank Transfer / Cash',
+        originReference: baseRef,
+        orderTotal: origTotal,
         notes: extraData.notes
       };
 
@@ -342,7 +356,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       const existingPayoutCard = get().transactions.find(t => 
         t.status === 'final_payout' && 
         t.account === tx.account && 
-        cleanReference(t.reference) === baseRef
+        cleanReference(t.reference || t.originReference) === baseRef
       );
 
       let nextTransactions: Transaction[] = [];
@@ -364,6 +378,11 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           payoutDate: extraData.payoutDate || today,
           payoutMethod: extraData.payoutMethod || existingPayoutCard.payoutMethod,
           payoutHistory: updatedHistory,
+          isSplit: isSplitNow,
+          originReference: baseRef,
+          originalCihAmount: origTotal,
+          remainingCihAmount: remainingMAD,
+          totalPaidOutMAD: updatedTotal,
           updatedAt: Date.now(),
         };
 
@@ -377,7 +396,12 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             eurRate: eurR,
             eurAmount: Number((remainingMAD / eurR).toFixed(2)),
             reference: `${baseRef} (Remaining)`,
-            notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left)`,
+            originReference: baseRef,
+            originalCihAmount: origTotal,
+            remainingCihAmount: remainingMAD,
+            totalPaidOutMAD: (tx.totalPaidOutMAD || 0) + payoutMAD,
+            isSplit: true,
+            notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left of ${formatMAD(origTotal)})`,
             updatedAt: Date.now(),
           };
 
@@ -404,6 +428,11 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             date: tx.date,
             source: tx.source,
             reference: baseRef,
+            originReference: baseRef,
+            originalCihAmount: origTotal,
+            remainingCihAmount: remainingMAD,
+            totalPaidOutMAD: payoutMAD,
+            isSplit: true,
             status: 'final_payout',
             kastAmount: Number((payoutMAD / (tx.exchangeRate || 9.90)).toFixed(2)),
             cihAmount: payoutMAD,
@@ -425,7 +454,12 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             eurRate: eurR,
             eurAmount: Number((remainingMAD / eurR).toFixed(2)),
             reference: `${baseRef} (Remaining)`,
-            notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left)`,
+            originReference: baseRef,
+            originalCihAmount: origTotal,
+            remainingCihAmount: remainingMAD,
+            totalPaidOutMAD: (tx.totalPaidOutMAD || 0) + payoutMAD,
+            isSplit: true,
+            notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left of ${formatMAD(origTotal)})`,
             updatedAt: Date.now(),
           };
 
@@ -441,6 +475,11 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             ...tx,
             status: 'final_payout',
             reference: baseRef,
+            originReference: baseRef,
+            originalCihAmount: origTotal,
+            remainingCihAmount: 0,
+            totalPaidOutMAD: payoutMAD,
+            isSplit: tx.isSplit || false,
             cihAmount: payoutMAD,
             payoutAmount: payoutMAD,
             eurRate: eurR,

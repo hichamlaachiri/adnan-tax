@@ -363,17 +363,22 @@ export const MoveStageModal: React.FC = () => {
               {/* Auto-Split Live Breakdown Notification */}
               {isPartialSplit && (
                 <div className="p-3 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 rounded-xl space-y-2 animate-fadeIn">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
-                    <Split className="w-3.5 h-3.5" />
-                    <span>Auto-Split: Daf3a Joz&apos;iya</span>
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-400">
+                    <div className="flex items-center gap-1.5">
+                      <Split className="w-3.5 h-3.5" />
+                      <span>Split Payout (Daf3a Joz&apos;iya)</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/20 rounded-md text-amber-700 dark:text-amber-300">
+                      Order: {tx.reference}
+                    </span>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-amber-500/20">
-                    <div className="bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-amber-500/20">
-                      <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
-                        Paid to {recipient || 'Recipient'}:
+                    <div className="bg-white/70 dark:bg-slate-900/70 p-2 rounded-lg border border-amber-500/20">
+                      <span className="text-purple-600 dark:text-purple-400 block text-[10px] font-bold">
+                        → Payout to {recipient || 'Partner'}:
                       </span>
-                      <span className="font-bold font-mono text-purple-600 dark:text-purple-400 text-xs">
+                      <span className="font-extrabold font-mono text-purple-600 dark:text-purple-400 text-xs block">
                         {formatMAD(currentPayoutVal)}
                       </span>
                       <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -381,11 +386,11 @@ export const MoveStageModal: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-amber-500/20">
-                      <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
-                        Remaining in CIH:
+                    <div className="bg-white/70 dark:bg-slate-900/70 p-2 rounded-lg border border-amber-500/20">
+                      <span className="text-emerald-600 dark:text-emerald-400 block text-[10px] font-bold">
+                        → Left in CIH Bank:
                       </span>
-                      <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 text-xs">
+                      <span className="font-extrabold font-mono text-emerald-600 dark:text-emerald-400 text-xs block">
                         {formatMAD(remainingVal)}
                       </span>
                       <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -393,6 +398,10 @@ export const MoveStageModal: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
+                    ✓ The Final Payout card will be clearly linked to <strong>{tx.reference}</strong>.
+                  </p>
                 </div>
               )}
 
