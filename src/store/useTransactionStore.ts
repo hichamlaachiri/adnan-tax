@@ -74,16 +74,18 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
           amount: existingAmt,
           date: existing.payoutDate || existing.date,
           recipient: existing.recipient || 'Partner',
+          method: existing.payoutMethod || 'Bank Transfer / Cash',
           originReference: baseRef,
-          notes: existing.notes
+          notes: existing.notes || tx.notes
         }];
         const currentHistory = tx.payoutHistory || [{
           id: 'hist-2',
           amount: currentAmt,
           date: tx.payoutDate || tx.date,
           recipient: tx.recipient || 'Partner',
+          method: tx.payoutMethod || 'Bank Transfer / Cash',
           originReference: baseRef,
-          notes: tx.notes
+          notes: tx.notes || existing.notes
         }];
         existing.payoutHistory = [...existingHistory, ...currentHistory];
 
@@ -425,6 +427,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
               method: existingPayoutCard.payoutMethod || 'Cash',
               originReference: baseRef,
               orderTotal: origTotal,
+              notes: existingPayoutCard.notes || tx.notes,
             }];
         const updatedHistory = [...prevHist, newInstallment];
 

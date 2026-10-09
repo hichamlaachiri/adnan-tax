@@ -325,31 +325,15 @@ export const KanbanBoard: React.FC = () => {
                         )}
                       </div>
 
-                      {/* CIH Bank: Show Split Remaining Indicator pill (NO progress bar as requested) */}
+                      {/* CIH Bank: Show Order Total Indicator */}
                       {col.id === 'settled_cih' && hasSplitActivity && (
-                        <div className="mt-1.5 px-2 py-1 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between text-[10px]">
-                          <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                            <Split className="w-3 h-3" />
-                            <span>{dict.splitActive}: {cleanReference(tx.reference)}</span>
+                        <div className="mt-1.5 px-2.5 py-1 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">
+                            {dict.orderTotal}
                           </span>
-                          <span className="text-slate-500 dark:text-slate-400 font-mono text-[9px]">
-                            {dict.orderTotal} <strong className="text-slate-700 dark:text-slate-300">{formatMAD(origOrderTotal)}</strong>
+                          <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                            {formatMAD(origOrderTotal)}
                           </span>
-                        </div>
-                      )}
-
-                      {/* Final Payout: Show Prominent Origin Order Badge */}
-                      {col.id === 'final_payout' && (
-                        <div className="mt-1.5 p-2 bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 rounded-xl space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
-                              <Split className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-                              <span>{dict.fromOrder}</span>
-                            </span>
-                            <span className="text-[11px] font-mono font-extrabold text-purple-700 dark:text-purple-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-700">
-                              {cleanReference(tx.reference || tx.originReference)}
-                            </span>
-                          </div>
                         </div>
                       )}
 
@@ -478,9 +462,10 @@ export const KanbanBoard: React.FC = () => {
                                   amount: tx.payoutAmount || tx.cihAmount || 0,
                                   date: tx.payoutDate || tx.date,
                                   recipient: tx.recipient || 'Partner',
-                                  method: tx.payoutMethod || 'Cash'
+                                  method: tx.payoutMethod || 'Cash',
+                                  notes: tx.notes
                                 }]).map((inst, idx) => (
-                                  <div key={inst.id || idx} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1">
+                                  <div key={inst.id || idx} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
                                     <div className="flex items-center justify-between font-bold">
                                       <span className="text-purple-600 dark:text-purple-400">
                                         • {dict.paymentNumber} #{idx + 1}
@@ -506,6 +491,14 @@ export const KanbanBoard: React.FC = () => {
                                         💵 {inst.method}
                                       </div>
                                     )}
+
+                                    {/* Installment Notes / Description if present */}
+                                    {(inst.notes || (idx === 0 && tx.notes)) && (
+                                      <div className="text-[9.5px] text-slate-600 dark:text-slate-300 bg-purple-50/60 dark:bg-purple-950/30 px-2 py-1 rounded-md border border-purple-100 dark:border-purple-900/40 italic flex items-start gap-1">
+                                        <span className="opacity-70">📝</span>
+                                        <span>{inst.notes || tx.notes}</span>
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -514,8 +507,8 @@ export const KanbanBoard: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Notes if any */}
-                      {tx.notes && (
+                      {/* Notes if any (for non-payout or when not showing inside history) */}
+                      {tx.notes && col.id !== 'final_payout' && (
                         <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400 italic line-clamp-1">
                           {tx.notes}
                         </p>

@@ -23,11 +23,13 @@ export const MoveStageModal: React.FC = () => {
   const [recipient, setRecipient] = useState<string>('');
   const [payoutAmount, setPayoutAmount] = useState<string>('');
   const [payoutMethod, setPayoutMethod] = useState<string>('Bank Transfer / Cash');
+  const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
     if (moveModalTx) {
       const { tx, targetStage } = moveModalTx;
       const baseUSD = tx.kastAmount || 0;
+      setNotes(tx.notes || '');
 
       if (targetStage === 'in_binance') {
         const defaultFee = Number((baseUSD * 0.01).toFixed(2));
@@ -138,9 +140,12 @@ export const MoveStageModal: React.FC = () => {
         payoutAmount: parseFloat(payoutAmount) || (tx.cihAmount ?? 0),
         payoutMethod,
         payoutDate: new Date().toISOString().split('T')[0],
+        notes: notes.trim() || tx.notes || undefined,
       });
     } else {
-      await moveTransactionStage(tx.id, targetStage);
+      await moveTransactionStage(tx.id, targetStage, {
+        notes: notes.trim() || tx.notes || undefined,
+      });
     }
   };
 
@@ -410,6 +415,19 @@ export const MoveStageModal: React.FC = () => {
                   value={payoutMethod}
                   onChange={(e) => setPayoutMethod(e.target.value)}
                   placeholder="e.g. CIH Virement, Cash, Wafacash..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  {dict.notesOptional}
+                </label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. 1st installment cash, invoice note..."
                   className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
                 />
               </div>
