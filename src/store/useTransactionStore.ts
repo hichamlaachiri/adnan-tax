@@ -333,7 +333,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     }
 
     // SPECIAL HANDLING: Moving from CIH Bank to Final Payout with single-card accumulation and crystal-clear split tracking
-    if (targetStage === 'final_payout' && tx.status === 'settled_cih') {
+    if (targetStage === 'final_payout') {
       const currentCih = tx.cihAmount ?? (tx.kastAmount * (tx.exchangeRate || 9.90));
       const payoutMAD = extraData.payoutAmount ?? currentCih;
       const remainingMAD = Number((currentCih - payoutMAD).toFixed(2));
@@ -607,7 +607,10 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   getFilteredTransactions: () => {
     const { transactions, selectedAccount } = get();
     if (selectedAccount === 'all') return transactions;
-    return transactions.filter(t => t.account === selectedAccount);
+    return transactions.filter(t => 
+      t.account === selectedAccount || 
+      (t.recipient && t.recipient.toLowerCase().includes(selectedAccount.toLowerCase()))
+    );
   },
 
   getMetrics: () => {

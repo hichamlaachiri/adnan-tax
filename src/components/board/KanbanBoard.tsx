@@ -195,7 +195,10 @@ export const KanbanBoard: React.FC = () => {
       {columns.map((col) => {
         const colTransactions = transactions.filter(t => {
           if (col.id === 'settled_cih') {
-            return t.status === 'settled_cih' || (t.status === 'transferred_to_hicham' && !t.recipient);
+            return t.status === 'settled_cih' || t.status === 'transferred_to_hicham';
+          }
+          if (col.id === 'final_payout') {
+            return t.status === 'final_payout';
           }
           return t.status === col.id;
         });
