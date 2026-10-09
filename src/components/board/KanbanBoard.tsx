@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTransactionStore, PROFILES } from '@/store/useTransactionStore';
 import { Transaction, PipelineStatus } from '@/types';
-import { formatUSD, formatMAD, formatEUR, formatDate } from '@/lib/utils';
+import { formatUSD, formatMAD, formatEUR, formatDate, cleanReference } from '@/lib/utils';
 import { 
   Plus, 
   Wallet, 
