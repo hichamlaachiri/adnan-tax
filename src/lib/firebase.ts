@@ -63,11 +63,19 @@ export function subscribeToTransactions(onUpdate: (transactions: Transaction[]) 
           binanceTxId: data.binanceTxId || '',
           cihAmount: data.cihAmount !== null && data.cihAmount !== undefined ? Number(data.cihAmount) : null,
           exchangeRate: data.exchangeRate !== null && data.exchangeRate !== undefined ? Number(data.exchangeRate) : null,
+          eurRate: data.eurRate !== null && data.eurRate !== undefined ? Number(data.eurRate) : 10.85,
+          eurAmount: data.eurAmount !== null && data.eurAmount !== undefined ? Number(data.eurAmount) : null,
           cihTxId: data.cihTxId || '',
           recipient: data.recipient || '',
           payoutAmount: data.payoutAmount !== null && data.payoutAmount !== undefined ? Number(data.payoutAmount) : null,
           payoutDate: data.payoutDate || '',
           payoutMethod: data.payoutMethod || '',
+          payoutHistory: Array.isArray(data.payoutHistory) ? data.payoutHistory : [],
+          isSplit: Boolean(data.isSplit),
+          originReference: data.originReference || '',
+          originalCihAmount: data.originalCihAmount !== null && data.originalCihAmount !== undefined ? Number(data.originalCihAmount) : undefined,
+          remainingCihAmount: data.remainingCihAmount !== null && data.remainingCihAmount !== undefined ? Number(data.remainingCihAmount) : undefined,
+          totalPaidOutMAD: data.totalPaidOutMAD !== null && data.totalPaidOutMAD !== undefined ? Number(data.totalPaidOutMAD) : undefined,
           transferredToHicham: Boolean(data.transferredToHicham),
           status: data.status || 'in_kast',
           notes: data.notes || '',
@@ -100,11 +108,18 @@ export async function saveTransactionToFirebase(tx: Transaction): Promise<string
   try {
     const docId = tx.id;
     const docRef = doc(db, TRANSACTIONS_COLLECTION, docId);
-    await setDoc(docRef, {
-      ...tx,
-      updatedAt: Date.now(),
-      createdAt: tx.createdAt || Date.now()
-    }, { merge: true });
+    
+    // Clean out undefined values to prevent Firestore serialization errors
+    const cleanedData: Record<string, unknown> = {};
+    Object.entries(tx).forEach(([key, val]) => {
+      if (val !== undefined) {
+        cleanedData[key] = val;
+      }
+    });
+    cleanedData.updatedAt = Date.now();
+    cleanedData.createdAt = tx.createdAt || Date.now();
+
+    await setDoc(docRef, cleanedData, { merge: true });
     return docId;
   } catch (error) {
     console.error("Error saving transaction to Firestore:", error);
