@@ -6,6 +6,7 @@ import { GlobalMetrics } from '@/components/dashboard/GlobalMetrics';
 import { KanbanBoard } from '@/components/board/KanbanBoard';
 import { AddTransactionModal } from '@/components/modals/AddTransactionModal';
 import { MoveStageModal } from '@/components/modals/MoveStageModal';
+import { ProofModal } from '@/components/modals/ProofModal';
 import { ReportModal } from '@/components/modals/ReportModal';
 import { useTransactionStore } from '@/store/useTransactionStore';
 
@@ -37,6 +38,7 @@ export default function Home() {
       {/* Modals */}
       <AddTransactionModal />
       <MoveStageModal />
+      <ProofModal />
       <ReportModal />
     </div>
   );

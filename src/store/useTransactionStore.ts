@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Transaction, AccountId, PipelineStatus, AccountSummary, PayoutInstallment } from '@/types';
+import { Transaction, AccountId, PipelineStatus, AccountSummary, PayoutInstallment, ProofImage } from '@/types';
 import { isFirebaseConfigured, saveTransactionToFirebase, deleteTransactionFromFirebase, subscribeToTransactions } from '@/lib/firebase';
 import { Language, translations, Translations } from '@/lib/i18n';
 import { cleanReference, formatMAD } from '@/lib/utils';
@@ -174,6 +174,7 @@ interface TransactionStore {
   isQuickAddOpen: boolean;
   quickAddStage: PipelineStatus;
   moveModalTx: { tx: Transaction; targetStage: PipelineStatus } | null;
+  proofModalTxId: string | null;
   isReportOpen: boolean;
   
   // Actions
@@ -187,6 +188,11 @@ interface TransactionStore {
   
   openMoveModal: (tx: Transaction, targetStage: PipelineStatus) => void;
   closeMoveModal: () => void;
+
+  openProofModal: (txId: string) => void;
+  closeProofModal: () => void;
+  addProofImage: (txId: string, image: ProofImage) => Promise<void>;
+  removeProofImage: (txId: string, imageId: string) => Promise<void>;
   
   setReportOpen: (open: boolean) => void;
   
@@ -257,6 +263,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   isQuickAddOpen: false,
   quickAddStage: 'in_kast',
   moveModalTx: null,
+  proofModalTxId: null,
   isReportOpen: false,
 
   setSelectedAccount: (acc) => set({ selectedAccount: acc }),
@@ -286,6 +293,53 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
   openMoveModal: (tx, targetStage) => set({ moveModalTx: { tx, targetStage } }),
   closeMoveModal: () => set({ moveModalTx: null }),
+
+  openProofModal: (txId) => set({ proofModalTxId: txId }),
+  closeProofModal: () => set({ proofModalTxId: null }),
+
+  addProofImage: async (txId, image) => {
+    const updated = get().transactions.map(t => {
+      if (t.id === txId) {
+        const nextImages = [...(t.proofImages || []), image];
+        return {
+          ...t,
+          proofImages: nextImages,
+          updatedAt: Date.now(),
+        };
+      }
+      return t;
+    });
+
+    set({ transactions: updated });
+    saveStorage(updated);
+
+    const changed = updated.find(t => t.id === txId);
+    if (changed && isFirebaseConfigured) {
+      await saveTransactionToFirebase(changed);
+    }
+  },
+
+  removeProofImage: async (txId, imageId) => {
+    const updated = get().transactions.map(t => {
+      if (t.id === txId) {
+        const nextImages = (t.proofImages || []).filter(img => img.id !== imageId);
+        return {
+          ...t,
+          proofImages: nextImages,
+          updatedAt: Date.now(),
+        };
+      }
+      return t;
+    });
+
+    set({ transactions: updated });
+    saveStorage(updated);
+
+    const changed = updated.find(t => t.id === txId);
+    if (changed && isFirebaseConfigured) {
+      await saveTransactionToFirebase(changed);
+    }
+  },
   
   setReportOpen: (open) => set({ isReportOpen: open }),
 

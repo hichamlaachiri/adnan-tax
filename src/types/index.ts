@@ -18,6 +18,13 @@ export interface PayoutInstallment {
   orderTotal?: number;
 }
 
+export interface ProofImage {
+  id: string;
+  dataUrl: string;
+  name?: string;
+  uploadedAt: number;
+}
+
 export interface Transaction {
   id: string;
   account: 'hicham' | 'zouhir' | 'adnan';
@@ -65,6 +72,7 @@ export interface Transaction {
   // Overall metadata
   status: PipelineStatus;
   notes?: string;
+  proofImages?: ProofImage[];
   createdAt: number;
   updatedAt: number;
 }

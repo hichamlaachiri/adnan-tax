@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   User,
-  Calendar
+  Calendar,
+  Paperclip
 } from 'lucide-react';
 
 interface InlineEurRateProps {
@@ -109,7 +110,8 @@ export const KanbanBoard: React.FC = () => {
   const { 
     getFilteredTransactions, 
     openQuickAdd, 
-    openMoveModal, 
+    openMoveModal,
+    openProofModal,
     deleteTransaction, 
     updateEurRate, 
     lastEurRate, 
@@ -285,15 +287,15 @@ export const KanbanBoard: React.FC = () => {
                   const paidMAD = isPayoutCol ? currentCardAmt : (tx.totalPaidOutMAD || (origOrderTotal > currentCardAmt ? Number((origOrderTotal - currentCardAmt).toFixed(2)) : 0));
                   const cihMAD = isCihCol ? currentCardAmt : (tx.remainingCihAmount !== undefined ? tx.remainingCihAmount : (origOrderTotal > currentCardAmt ? Number((origOrderTotal - currentCardAmt).toFixed(2)) : 0));
                   const hasSplitActivity = (origOrderTotal > 0 && paidMAD > 0 && (cihMAD > 0 || isPayoutCol)) || tx.isSplit;
-                  const paidPercent = origOrderTotal > 0 ? Math.min(100, Math.max(0, Math.round((paidMAD / origOrderTotal) * 100))) : 0;
-                  const cihPercent = 100 - paidPercent;
+                  const proofCount = tx.proofImages?.length || 0;
 
                   return (
                     <div
                       key={tx.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, tx.id)}
-                      className="bg-slate-50/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700 shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative"
+                      onClick={() => openProofModal(tx.id)}
+                      className="bg-slate-50/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700 shadow-xs hover:shadow-md transition-all cursor-pointer active:cursor-grabbing group relative"
                     >
                       {/* Top row: Profile & Date */}
                       <div className="flex items-center justify-between">
@@ -334,38 +336,6 @@ export const KanbanBoard: React.FC = () => {
                           <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
                             {formatMAD(origOrderTotal)}
                           </span>
-                        </div>
-                      )}
-
-                      {/* Final Payout ONLY: Visual Dual-Tone Split Allocation Bar */}
-                      {isPayoutCol && hasSplitActivity && (
-                        <div className="mt-2 space-y-1.5 bg-slate-100/90 dark:bg-slate-900/90 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                          <div className="flex items-center justify-between text-[10px] font-bold">
-                            <span className="text-purple-600 dark:text-purple-400 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                              <span>{dict.paid}: {formatMAD(paidMAD)}</span>
-                            </span>
-                            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              <span>{dict.cihRemaining}: {formatMAD(cihMAD)}</span>
-                            </span>
-                          </div>
-
-                          <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
-                            <div 
-                              style={{ width: `${paidPercent}%` }} 
-                              className="bg-purple-500 h-full transition-all"
-                            />
-                            <div 
-                              style={{ width: `${cihPercent}%` }} 
-                              className="bg-emerald-500 h-full transition-all"
-                            />
-                          </div>
-
-                          <div className="flex items-center justify-between text-[9px] text-slate-400 pt-0.5">
-                            <span>{dict.orderTotal} <strong className="text-slate-600 dark:text-slate-300 font-mono">{formatMAD(origOrderTotal)}</strong></span>
-                            <span className="font-bold text-purple-600 dark:text-purple-400">{paidPercent}% {dict.delivered}</span>
-                          </div>
                         </div>
                       )}
 
@@ -516,14 +486,28 @@ export const KanbanBoard: React.FC = () => {
 
                       {/* Drag / Move helper buttons */}
                       <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs">
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <GripVertical className="w-3 h-3 text-slate-300" /> {dict.dragToMove}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <GripVertical className="w-3 h-3 text-slate-300" /> {dict.dragToMove}
+                          </span>
+                          {proofCount > 0 && (
+                            <span
+                              title="View attached proof"
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800"
+                            >
+                              <Paperclip className="w-2.5 h-2.5" />
+                              <span>{proofCount}</span>
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex items-center gap-1">
                           {col.id === 'in_kast' && (
                             <button
-                              onClick={() => openMoveModal(tx, 'in_binance')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openMoveModal(tx, 'in_binance');
+                              }}
                               className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-md shadow-xs active:scale-95 transition-all cursor-pointer"
                             >
                               <span>{dict.toBinance}</span>
@@ -532,7 +516,10 @@ export const KanbanBoard: React.FC = () => {
 
                           {col.id === 'in_binance' && (
                             <button
-                              onClick={() => openMoveModal(tx, 'settled_cih')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openMoveModal(tx, 'settled_cih');
+                              }}
                               className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md shadow-xs active:scale-95 transition-all cursor-pointer"
                             >
                               <span>{dict.toCIH}</span>
@@ -541,7 +528,10 @@ export const KanbanBoard: React.FC = () => {
 
                           {col.id === 'settled_cih' && (
                             <button
-                              onClick={() => openMoveModal(tx, 'final_payout')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openMoveModal(tx, 'final_payout');
+                              }}
                               className="px-2 py-0.5 text-[10px] font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-md shadow-xs active:scale-95 transition-all cursor-pointer"
                             >
                               <span>{dict.toPayout}</span>
@@ -549,7 +539,8 @@ export const KanbanBoard: React.FC = () => {
                           )}
 
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (confirm(dict.deleteConfirm)) {
                                 deleteTransaction(tx.id);
                               }
