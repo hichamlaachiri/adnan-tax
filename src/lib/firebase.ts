@@ -103,21 +103,34 @@ export function subscribeToTransactions(onUpdate: (transactions: Transaction[]) 
   }
 }
 
+// Recursively strips keys with `undefined` values because Firestore rejects `undefined` anywhere in a document (including nested arrays/objects like payoutHistory)
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        cleaned[k] = stripUndefined(v);
+      }
+    }
+    return cleaned as T;
+  }
+  return value;
+}
+
 export async function saveTransactionToFirebase(tx: Transaction): Promise<string | null> {
   if (!db) return null;
   try {
     const docId = tx.id;
     const docRef = doc(db, TRANSACTIONS_COLLECTION, docId);
     
-    // Clean out undefined values to prevent Firestore serialization errors
-    const cleanedData: Record<string, unknown> = {};
-    Object.entries(tx).forEach(([key, val]) => {
-      if (val !== undefined) {
-        cleanedData[key] = val;
-      }
+    const cleanedData = stripUndefined({
+      ...tx,
+      updatedAt: Date.now(),
+      createdAt: tx.createdAt || Date.now(),
     });
-    cleanedData.updatedAt = Date.now();
-    cleanedData.createdAt = tx.createdAt || Date.now();
 
     await setDoc(docRef, cleanedData, { merge: true });
     return docId;

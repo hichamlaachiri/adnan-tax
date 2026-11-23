@@ -401,7 +401,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         method: extraData.payoutMethod || 'Bank Transfer / Cash',
         originReference: baseRef,
         orderTotal: origTotal,
-        notes: extraData.notes
+        notes: extraData.notes || ''
       };
 
       // Check if a Final Payout card for this transaction already exists
@@ -427,7 +427,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
               method: existingPayoutCard.payoutMethod || 'Cash',
               originReference: baseRef,
               orderTotal: origTotal,
-              notes: existingPayoutCard.notes || tx.notes,
+              notes: existingPayoutCard.notes || tx.notes || '',
             }];
         const updatedHistory = [...prevHist, newInstallment];
 
