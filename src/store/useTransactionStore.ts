@@ -166,6 +166,7 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
 interface TransactionStore {
   transactions: Transaction[];
   selectedAccount: AccountId;
+  searchQuery: string;
   language: Language;
   lastEurRate: number;
   isLoaded: boolean;
@@ -179,6 +180,7 @@ interface TransactionStore {
   
   // Actions
   setSelectedAccount: (account: AccountId) => void;
+  setSearchQuery: (query: string) => void;
   setLanguage: (lang: Language) => void;
   setLastEurRate: (rate: number) => void;
   t: () => Translations;
@@ -256,6 +258,7 @@ const saveStorage = (txs: Transaction[]) => {
 export const useTransactionStore = create<TransactionStore>((set, get) => ({
   transactions: [],
   selectedAccount: 'all',
+  searchQuery: '',
   language: 'en',
   lastEurRate: 10.85,
   isLoaded: false,
@@ -267,6 +270,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   isReportOpen: false,
 
   setSelectedAccount: (acc) => set({ selectedAccount: acc }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
   
   setLanguage: (lang) => {
     set({ language: lang });
@@ -722,12 +726,35 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   },
 
   getFilteredTransactions: () => {
-    const { transactions, selectedAccount } = get();
-    if (selectedAccount === 'all') return transactions;
-    return transactions.filter(t => 
-      t.account === selectedAccount || 
-      (t.recipient && t.recipient.toLowerCase().includes(selectedAccount.toLowerCase()))
-    );
+    const { transactions, selectedAccount, searchQuery } = get();
+    const byAccount =
+      selectedAccount === 'all'
+        ? transactions
+        : transactions.filter(
+            (t) =>
+              t.account === selectedAccount ||
+              (t.recipient &&
+                t.recipient.toLowerCase().includes(selectedAccount.toLowerCase()))
+          );
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return byAccount;
+
+    return byAccount.filter((t) => {
+      const haystack = [
+        t.reference,
+        t.originReference,
+        t.source,
+        t.recipient,
+        t.notes,
+        t.account,
+        t.payoutMethod,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
   },
 
   getMetrics: () => {

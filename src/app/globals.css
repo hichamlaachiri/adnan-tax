@@ -1,26 +1,94 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg-canvas: #F6F5F1;
+  --bg-surface: #FFFFFF;
+  --bg-track: #EEEDE8;
+  --bg-hover: #FAF9F6;
+  --border-subtle: #E4E2DA;
+  --border-strong: #D3D0C5;
+  --text-primary: #171614;
+  --text-secondary: #625F57;
+  --text-muted: #918D84;
+  --accent-ink: #171614;
+  --accent-ink-fg: #FFFFFF;
+  --accent-positive: #0F766E;
+  --accent-positive-bg: #F0FDFA;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-canvas: #111110;
+    --bg-surface: #1A1918;
+    --bg-track: #151413;
+    --bg-hover: #21201E;
+    --border-subtle: #2A2926;
+    --border-strong: #3A3834;
+    --text-primary: #F3F1EC;
+    --text-secondary: #A6A298;
+    --text-muted: #726E66;
+    --accent-ink: #F3F1EC;
+    --accent-ink-fg: #141413;
+    --accent-positive: #2DD4BF;
+    --accent-positive-bg: #132A27;
   }
 }
 
+@theme inline {
+  --color-background: var(--bg-canvas);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle custom scrollbars for columns */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 180ms ease-out forwards;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
 }

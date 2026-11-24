@@ -21,21 +21,15 @@ export default function Home() {
   }, [initStore]);
 
   return (
-    <div className="min-h-screen bg-slate-50/60 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-5 flex-1">
-        {/* 1. Account Selector Pills, Report Export, Language */}
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans">
+      <main className="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 flex-1">
         <Header />
-
-        {/* 2. Four Summary Cards (KAST, Binance, CIH Bank, Final Payouts) */}
         <GlobalMetrics />
-
-        {/* 3. 4-Column Pipeline Board with Drag & Drop */}
-        <section className="pt-2">
+        <section aria-label="Refund pipeline">
           <KanbanBoard />
         </section>
       </main>
 
-      {/* Modals */}
       <AddTransactionModal />
       <MoveStageModal />
       <ProofModal />

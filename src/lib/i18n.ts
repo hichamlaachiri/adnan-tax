@@ -79,6 +79,11 @@ export interface Translations {
   totalRecords: string;
   totalSettled: string;
   editEurRate: string;
+  searchPlaceholder: string;
+  newRefund: string;
+  proofLabel: string;
+  attachProof: string;
+  clearSearch: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -161,6 +166,11 @@ export const translations: Record<Language, Translations> = {
     totalRecords: 'Total Records:',
     totalSettled: 'Settled',
     editEurRate: 'Click to edit EUR exchange rate',
+    searchPlaceholder: 'Search ref, recipient, note...',
+    newRefund: 'New Refund',
+    proofLabel: 'Proof',
+    attachProof: 'Add proof',
+    clearSearch: 'Clear',
   },
   es: {
     allAccounts: 'Todos los perfiles',
@@ -241,6 +251,11 @@ export const translations: Record<Language, Translations> = {
     totalRecords: 'Total de Registros:',
     totalSettled: 'Liquidado',
     editEurRate: 'Clic para editar tasa EUR',
+    searchPlaceholder: 'Buscar ref, destinatario, nota...',
+    newRefund: 'Nuevo Reembolso',
+    proofLabel: 'Recibo',
+    attachProof: 'Adjuntar',
+    clearSearch: 'Limpiar',
   },
   ar: {
     allAccounts: 'جميع الحسابات',
@@ -321,5 +336,10 @@ export const translations: Record<Language, Translations> = {
     totalRecords: 'إجمالي السجلات:',
     totalSettled: 'تمت تسويته',
     editEurRate: 'اضغط لتعديل سعر صرف اليورو',
+    searchPlaceholder: 'بحث بالمرجع، المستفيد، أو ملاحظة...',
+    newRefund: 'إضافة استرداد',
+    proofLabel: 'إثبات',
+    attachProof: 'إرفاق إثبات',
+    clearSearch: 'مسح',
   },
 };
