@@ -18,6 +18,23 @@
   --accent-positive-bg: #F0FDFA;
 }
 
+.dark {
+  color-scheme: dark;
+  --bg-canvas: #111110;
+  --bg-surface: #1A1918;
+  --bg-track: #151413;
+  --bg-hover: #21201E;
+  --border-subtle: #2A2926;
+  --border-strong: #3A3834;
+  --text-primary: #F3F1EC;
+  --text-secondary: #A6A298;
+  --text-muted: #726E66;
+  --accent-ink: #F3F1EC;
+  --accent-ink-fg: #141413;
+  --accent-positive: #2DD4BF;
+  --accent-positive-bg: #132A27;
+}
+
 @theme inline {
   --color-background: var(--bg-canvas);
   --color-foreground: var(--text-primary);

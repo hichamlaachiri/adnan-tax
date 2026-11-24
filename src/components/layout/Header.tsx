@@ -4,7 +4,7 @@ import React from 'react';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { AccountId } from '@/types';
 import { Language } from '@/lib/i18n';
-import { FileText, Plus, Search, X } from 'lucide-react';
+import { FileText, Plus, Search, X, Sun, Moon } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const {
@@ -15,6 +15,8 @@ export const Header: React.FC = () => {
     setSearchQuery,
     language,
     setLanguage,
+    theme,
+    toggleTheme,
     setReportOpen,
     openQuickAdd,
     t,
@@ -77,6 +79,21 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Theme Toggle (Light / Dark) */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            className="p-1.5 rounded-lg bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+          </button>
+
           {/* Language Switcher */}
           <div
             role="group"

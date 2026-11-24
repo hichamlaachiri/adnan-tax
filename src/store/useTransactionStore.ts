@@ -37,6 +37,7 @@ export const PROFILES: Record<'hicham' | 'zouhir' | 'adnan', AccountSummary> = {
 const STORAGE_KEY = 'taxfree_flow_transactions_live';
 const LANG_STORAGE_KEY = 'taxfree_flow_lang';
 const EUR_RATE_STORAGE_KEY = 'taxfree_last_eur_rate';
+const THEME_STORAGE_KEY = 'taxfree_flow_theme';
 
 // Consolidates multiple Final Payout cards with the same base reference into ONE single card
 export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[] {
@@ -168,6 +169,7 @@ interface TransactionStore {
   selectedAccount: AccountId;
   searchQuery: string;
   language: Language;
+  theme: 'light' | 'dark';
   lastEurRate: number;
   isLoaded: boolean;
   
@@ -182,6 +184,8 @@ interface TransactionStore {
   setSelectedAccount: (account: AccountId) => void;
   setSearchQuery: (query: string) => void;
   setLanguage: (lang: Language) => void;
+  setTheme: (theme: 'light' | 'dark') => void;
+  toggleTheme: () => void;
   setLastEurRate: (rate: number) => void;
   t: () => Translations;
   
@@ -260,6 +264,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   selectedAccount: 'all',
   searchQuery: '',
   language: 'en',
+  theme: 'light',
   lastEurRate: 10.85,
   isLoaded: false,
   
@@ -279,6 +284,19 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
       document.documentElement.lang = lang;
     }
+  },
+
+  setTheme: (theme) => {
+    set({ theme });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    }
+  },
+
+  toggleTheme: () => {
+    const next = get().theme === 'dark' ? 'light' : 'dark';
+    get().setTheme(next);
   },
 
   setLastEurRate: (rate) => {
@@ -360,6 +378,15 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         set({ language: savedLang });
         document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
         document.documentElement.lang = savedLang;
+      }
+
+      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        set({ theme: savedTheme });
+        document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+      } else {
+        set({ theme: 'light' });
+        document.documentElement.classList.remove('dark');
       }
 
       const savedRate = localStorage.getItem(EUR_RATE_STORAGE_KEY);
