@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Transaction, AccountId, PipelineStatus, AccountSummary, PayoutInstallment, ProofImage } from '@/types';
+import { Transaction, AccountId, PipelineStatus, AccountSummary, PayoutInstallment, ProofImage, StageHistoryEntry } from '@/types';
 import { isFirebaseConfigured, saveTransactionToFirebase, deleteTransactionFromFirebase, subscribeToTransactions } from '@/lib/firebase';
 import { Language, translations, Translations } from '@/lib/i18n';
 import { cleanReference, formatMAD } from '@/lib/utils';
@@ -39,6 +39,25 @@ const LANG_STORAGE_KEY = 'taxfree_flow_lang';
 const EUR_RATE_STORAGE_KEY = 'taxfree_last_eur_rate';
 const THEME_STORAGE_KEY = 'taxfree_flow_theme';
 
+function mergeStageHistory(
+  a?: StageHistoryEntry[],
+  b?: StageHistoryEntry[]
+): StageHistoryEntry[] {
+  const map = new Map<string, StageHistoryEntry>();
+  for (const item of [...(a || []), ...(b || [])]) {
+    if (item && item.id) map.set(item.id, item);
+  }
+  return Array.from(map.values()).sort((x, y) => x.timestamp - y.timestamp);
+}
+
+function mergeProofImages(a?: ProofImage[], b?: ProofImage[]): ProofImage[] {
+  const map = new Map<string, ProofImage>();
+  for (const img of [...(a || []), ...(b || [])]) {
+    if (img && img.id) map.set(img.id, img);
+  }
+  return Array.from(map.values()).sort((x, y) => x.uploadedAt - y.uploadedAt);
+}
+
 // Consolidates multiple Final Payout cards with the same base reference into ONE single card
 export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[] {
   const nonPayout: Transaction[] = [];
@@ -65,6 +84,15 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
         existing.originReference = baseRef;
         existing.originalCihAmount = origTotal;
         existing.isSplit = existing.isSplit || tx.isSplit || (origTotal > totalAmt);
+        // Preserve Step 1 & Step 2 traceability fields
+        existing.binanceAmount = existing.binanceAmount ?? tx.binanceAmount ?? null;
+        existing.binanceFee = existing.binanceFee ?? tx.binanceFee ?? null;
+        existing.binanceTxId = existing.binanceTxId || tx.binanceTxId;
+        existing.exchangeRate = existing.exchangeRate ?? tx.exchangeRate ?? null;
+        existing.cihTxId = existing.cihTxId || tx.cihTxId;
+        existing.stageHistory = mergeStageHistory(existing.stageHistory, tx.stageHistory);
+        existing.proofImages = mergeProofImages(existing.proofImages, tx.proofImages);
+
         if (tx.notes && !existing.notes?.includes(tx.notes)) {
           existing.notes = existing.notes ? `${existing.notes} | ${tx.notes}` : tx.notes;
         }
@@ -129,7 +157,12 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
           totalPaidOutMAD: paidDiff,
           isSplit: true,
           status: 'final_payout',
-          kastAmount: Number((paidDiff / (nonP.exchangeRate || 9.90)).toFixed(2)),
+          kastAmount: nonP.kastAmount || Number((paidDiff / (nonP.exchangeRate || 9.90)).toFixed(2)),
+          binanceAmount: nonP.binanceAmount ?? null,
+          binanceFee: nonP.binanceFee ?? null,
+          binanceTxId: nonP.binanceTxId,
+          exchangeRate: nonP.exchangeRate ?? null,
+          cihTxId: nonP.cihTxId,
           cihAmount: paidDiff,
           payoutAmount: paidDiff,
           eurRate: rate,
@@ -146,6 +179,8 @@ export function consolidatePayoutTransactions(txs: Transaction[]): Transaction[]
             orderTotal: origTotal,
             notes: `Split payment from ${baseRef}`
           }],
+          stageHistory: nonP.stageHistory || [],
+          proofImages: nonP.proofImages || [],
           notes: `Split payment from ${baseRef}`,
           createdAt: nonP.createdAt || Date.now(),
           updatedAt: Date.now(),
@@ -221,8 +256,10 @@ interface TransactionStore {
     extraData?: {
       binanceAmount?: number;
       binanceFee?: number;
+      binanceTxId?: string;
       cihAmount?: number;
       exchangeRate?: number;
+      cihTxId?: string;
       eurRate?: number;
       eurAmount?: number;
       recipient?: string;
@@ -429,18 +466,31 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
   addTransaction: async (data) => {
     const today = new Date().toISOString().split('T')[0];
+    const now = Date.now();
+    const initialStage = data.stage || 'in_kast';
+    const initialEntry: StageHistoryEntry = {
+      id: 'hist-kast-' + now.toString(36),
+      stage: initialStage,
+      timestamp: now,
+      date: data.date || today,
+      amount: data.kastAmount,
+      currency: 'USD',
+      notes: data.notes || undefined,
+    };
+
     const newTx: Transaction = {
-      id: 'tx-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+      id: 'tx-' + now.toString(36) + Math.random().toString(36).substring(2, 5),
       account: data.account,
       date: data.date || today,
       source: data.source || 'Global Blue Refund',
       reference: data.reference || `GB-${Math.floor(10000 + Math.random() * 90000)}`,
       kastAmount: data.kastAmount,
-      status: data.stage || 'in_kast',
+      status: initialStage,
       notes: data.notes || '',
       eurRate: get().lastEurRate,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      stageHistory: [initialEntry],
+      createdAt: now,
+      updatedAt: now,
     };
 
     if (data.account === 'adnan' && data.stage === 'transferred_to_hicham') {
@@ -478,8 +528,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       const origTotal = tx.originalCihAmount || currentCih;
       const isSplitNow = remainingMAD > 0.01 || (tx.isSplit ?? false) || (origTotal > payoutMAD);
       
+      const now = Date.now();
       const newInstallment: PayoutInstallment = {
-        id: 'inst-' + Date.now(),
+        id: 'inst-' + now,
         amount: payoutMAD,
         date: extraData.payoutDate || today,
         recipient: recipient,
@@ -489,6 +540,17 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         notes: extraData.notes || ''
       };
 
+      const payoutStageEntry: StageHistoryEntry = {
+        id: 'hist-payout-' + now.toString(36),
+        stage: 'final_payout',
+        timestamp: now,
+        date: extraData.payoutDate || today,
+        amount: payoutMAD,
+        currency: 'MAD',
+        recipient,
+        notes: extraData.notes || undefined,
+      };
+
       // Check if a Final Payout card for this transaction already exists
       const existingPayoutCard = get().transactions.find(t => 
         t.status === 'final_payout' && 
@@ -496,8 +558,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       );
 
       let nextTransactions: Transaction[] = [];
-      let txToSave: Transaction[] = [];
-      let txToDeleteIds: string[] = [];
+      const txToSave: Transaction[] = [];
+      const txToDeleteIds: string[] = [];
 
       if (existingPayoutCard) {
         // Accumulate onto existing Final Payout card
@@ -518,6 +580,18 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
 
         const updatedPayoutCard: Transaction = {
           ...existingPayoutCard,
+          // Preserve full Step 1, 2, 3 traceability
+          kastAmount: existingPayoutCard.kastAmount || tx.kastAmount,
+          binanceAmount: existingPayoutCard.binanceAmount ?? tx.binanceAmount ?? null,
+          binanceFee: existingPayoutCard.binanceFee ?? tx.binanceFee ?? null,
+          binanceTxId: existingPayoutCard.binanceTxId || tx.binanceTxId,
+          exchangeRate: existingPayoutCard.exchangeRate ?? tx.exchangeRate ?? null,
+          cihTxId: existingPayoutCard.cihTxId || tx.cihTxId,
+          proofImages: mergeProofImages(existingPayoutCard.proofImages, tx.proofImages),
+          stageHistory: [
+            ...mergeStageHistory(existingPayoutCard.stageHistory, tx.stageHistory),
+            payoutStageEntry,
+          ],
           payoutAmount: updatedTotal,
           cihAmount: updatedTotal,
           eurRate: eurR,
@@ -531,7 +605,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           originalCihAmount: origTotal,
           remainingCihAmount: remainingMAD,
           totalPaidOutMAD: updatedTotal,
-          updatedAt: Date.now(),
+          updatedAt: now,
         };
 
         txToSave.push(updatedPayoutCard);
@@ -550,7 +624,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             totalPaidOutMAD: (tx.totalPaidOutMAD || 0) + payoutMAD,
             isSplit: true,
             notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left of ${formatMAD(origTotal)})`,
-            updatedAt: Date.now(),
+            updatedAt: now,
           };
 
           txToSave.push(updatedCihCard);
@@ -561,7 +635,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             return t;
           });
         } else {
-          // 0 remaining in CIH: remove CIH card completely
+          // 0 remaining in CIH: remove CIH card completely (all history is safely preserved on updatedPayoutCard)
           txToDeleteIds.push(tx.id);
           nextTransactions = get().transactions
             .filter(t => t.id !== tx.id)
@@ -571,7 +645,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         // No existing Final Payout card -> create ONE card in Final Payout
         if (remainingMAD > 0.01) {
           const newPayoutCard: Transaction = {
-            id: 'tx-payout-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+            id: 'tx-payout-' + now.toString(36) + Math.random().toString(36).substring(2, 5),
             account: tx.account,
             date: tx.date,
             source: tx.source,
@@ -582,7 +656,15 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             totalPaidOutMAD: payoutMAD,
             isSplit: true,
             status: 'final_payout',
-            kastAmount: Number((payoutMAD / (tx.exchangeRate || 9.90)).toFixed(2)),
+            // Preserve Step 1, 2, 3 traceability
+            kastAmount: tx.kastAmount,
+            binanceAmount: tx.binanceAmount ?? null,
+            binanceFee: tx.binanceFee ?? null,
+            binanceTxId: tx.binanceTxId,
+            exchangeRate: tx.exchangeRate ?? null,
+            cihTxId: tx.cihTxId,
+            proofImages: tx.proofImages || [],
+            stageHistory: [...(tx.stageHistory || []), payoutStageEntry],
             cihAmount: payoutMAD,
             payoutAmount: payoutMAD,
             eurRate: eurR,
@@ -592,8 +674,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             payoutMethod: extraData.payoutMethod || 'Bank Transfer / Cash',
             payoutHistory: [newInstallment],
             notes: extraData.notes || '',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
+            createdAt: tx.createdAt || now,
+            updatedAt: now,
           };
 
           const updatedCihCard: Transaction = {
@@ -608,7 +690,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             totalPaidOutMAD: (tx.totalPaidOutMAD || 0) + payoutMAD,
             isSplit: true,
             notes: `Remaining balance from ${baseRef} (${formatMAD(remainingMAD)} left of ${formatMAD(origTotal)})`,
-            updatedAt: Date.now(),
+            updatedAt: now,
           };
 
           txToSave.push(newPayoutCard, updatedCihCard);
@@ -636,7 +718,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
             payoutDate: extraData.payoutDate || today,
             payoutMethod: extraData.payoutMethod || 'Bank Transfer / Cash',
             payoutHistory: [newInstallment],
-            updatedAt: Date.now(),
+            stageHistory: [...(tx.stageHistory || []), payoutStageEntry],
+            updatedAt: now,
           };
 
           txToSave.push(fullPayoutCard);
@@ -660,18 +743,35 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     }
 
     // Standard moves for other stages (KAST -> Binance -> CIH)
+    const now = Date.now();
     const updated = get().transactions.map(t => {
       if (t.id === id) {
         const merged: Transaction = {
           ...t,
           status: targetStage,
-          updatedAt: Date.now(),
+          updatedAt: now,
         };
+
+        const nextHistory = [...(t.stageHistory || [])];
 
         if (targetStage === 'in_binance') {
           const fee = extraData.binanceFee ?? (extraData.binanceAmount ? Number((t.kastAmount - extraData.binanceAmount).toFixed(2)) : Number((t.kastAmount * 0.01).toFixed(2)));
-          merged.binanceAmount = extraData.binanceAmount ?? Number((t.kastAmount - fee).toFixed(2));
+          const net = extraData.binanceAmount ?? Number((t.kastAmount - fee).toFixed(2));
+          merged.binanceAmount = net;
           merged.binanceFee = fee;
+          if (extraData.binanceTxId) {
+            merged.binanceTxId = extraData.binanceTxId;
+          }
+          nextHistory.push({
+            id: 'hist-binance-' + now.toString(36),
+            stage: 'in_binance',
+            timestamp: now,
+            date: today,
+            amount: net,
+            currency: 'USDT',
+            fee,
+            txId: extraData.binanceTxId || undefined,
+          });
         }
 
         if (targetStage === 'settled_cih') {
@@ -682,16 +782,38 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
           merged.cihAmount = cihMAD;
           merged.eurRate = eurR;
           merged.eurAmount = extraData.eurAmount ?? Number((cihMAD / eurR).toFixed(2));
+          if (extraData.cihTxId) {
+            merged.cihTxId = extraData.cihTxId;
+          }
+          nextHistory.push({
+            id: 'hist-cih-' + now.toString(36),
+            stage: 'settled_cih',
+            timestamp: now,
+            date: today,
+            amount: cihMAD,
+            currency: 'MAD',
+            rate,
+            txId: extraData.cihTxId || undefined,
+          });
         }
 
         if (targetStage === 'transferred_to_hicham') {
           merged.transferredToHicham = true;
+          nextHistory.push({
+            id: 'hist-hicham-' + now.toString(36),
+            stage: 'transferred_to_hicham',
+            timestamp: now,
+            date: today,
+            amount: t.kastAmount,
+            currency: 'USD',
+          });
         }
 
         if (extraData.notes) {
           merged.notes = extraData.notes;
         }
 
+        merged.stageHistory = nextHistory;
         return merged;
       }
       return t;

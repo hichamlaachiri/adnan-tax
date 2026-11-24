@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTransactionStore, PROFILES } from '@/store/useTransactionStore';
-import { ProofImage } from '@/types';
+import { PipelineStatus, ProofImage, StageHistoryEntry, Transaction } from '@/types';
 import { formatUSD, formatMAD, formatDate, cleanReference } from '@/lib/utils';
 import {
   X,
@@ -14,11 +14,86 @@ import {
   Loader2,
   AlertCircle,
   Paperclip,
+  Clock,
 } from 'lucide-react';
 
 const MAX_DIMENSION = 1280;
 const JPEG_QUALITY = 0.72;
 const MAX_TOTAL_BYTES = 750_000;
+
+const STAGE_META: Record<PipelineStatus, { label: string; dot: string }> = {
+  in_kast: { label: 'Step 1 · KAST', dot: 'bg-blue-600' },
+  in_binance: { label: 'Step 2 · Binance', dot: 'bg-amber-600' },
+  settled_cih: { label: 'Step 3 · CIH Bank', dot: 'bg-teal-600' },
+  final_payout: { label: 'Step 4 · Payout', dot: 'bg-emerald-600' },
+  transferred_to_hicham: { label: 'Transferred to Hicham', dot: 'bg-sky-600' },
+};
+
+const STAGE_SHORT: Record<PipelineStatus, string> = {
+  in_kast: 'KAST',
+  in_binance: 'Binance',
+  settled_cih: 'CIH',
+  final_payout: 'Payout',
+  transferred_to_hicham: 'Hicham',
+};
+
+function buildTimeline(tx: Transaction): StageHistoryEntry[] {
+  if (tx.stageHistory && tx.stageHistory.length > 0) {
+    return [...tx.stageHistory].sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  // Fallback for legacy records created before stageHistory existed
+  const entries: StageHistoryEntry[] = [];
+  if (tx.kastAmount) {
+    entries.push({
+      id: 'legacy-kast',
+      stage: 'in_kast',
+      timestamp: tx.createdAt || 0,
+      date: tx.date,
+      amount: tx.kastAmount,
+      currency: 'USD',
+    });
+  }
+  if (tx.binanceAmount !== null && tx.binanceAmount !== undefined) {
+    entries.push({
+      id: 'legacy-binance',
+      stage: 'in_binance',
+      timestamp: (tx.createdAt || 0) + 1,
+      date: tx.date,
+      amount: tx.binanceAmount,
+      currency: 'USDT',
+      fee: tx.binanceFee ?? undefined,
+      txId: tx.binanceTxId || undefined,
+    });
+  }
+  if (
+    (tx.cihAmount !== null && tx.cihAmount !== undefined) ||
+    tx.originalCihAmount
+  ) {
+    entries.push({
+      id: 'legacy-cih',
+      stage: 'settled_cih',
+      timestamp: (tx.createdAt || 0) + 2,
+      date: tx.date,
+      amount: tx.originalCihAmount || tx.cihAmount || 0,
+      currency: 'MAD',
+      rate: tx.exchangeRate ?? undefined,
+      txId: tx.cihTxId || undefined,
+    });
+  }
+  if (tx.status === 'final_payout' && tx.payoutAmount) {
+    entries.push({
+      id: 'legacy-payout',
+      stage: 'final_payout',
+      timestamp: tx.updatedAt || (tx.createdAt || 0) + 3,
+      date: tx.payoutDate || tx.date,
+      amount: tx.payoutAmount,
+      currency: 'MAD',
+      recipient: tx.recipient || undefined,
+    });
+  }
+  return entries;
+}
 
 async function compressImageFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -111,6 +186,7 @@ export const ProofModal: React.FC = () => {
               Math.random().toString(36).substring(2, 6),
             dataUrl: compressed,
             name: file.name || `Proof ${new Date().toLocaleDateString()}`,
+            stage: tx.status,
             uploadedAt: Date.now(),
           };
 
@@ -167,6 +243,7 @@ export const ProofModal: React.FC = () => {
   if (!tx) return null;
 
   const profile = PROFILES[tx.account];
+  const timeline = buildTimeline(tx);
   const displayAmount =
     tx.status === 'final_payout'
       ? formatMAD(tx.payoutAmount || tx.cihAmount || 0)
@@ -176,14 +253,7 @@ export const ProofModal: React.FC = () => {
       ? formatUSD(tx.binanceAmount || tx.kastAmount)
       : formatUSD(tx.kastAmount);
 
-  const stageLabel =
-    tx.status === 'final_payout'
-      ? 'Final Payout'
-      : tx.status === 'settled_cih' || tx.status === 'transferred_to_hicham'
-      ? 'CIH Bank'
-      : tx.status === 'in_binance'
-      ? 'Binance'
-      : 'KAST';
+  const stageLabel = STAGE_SHORT[tx.status] || 'KAST';
 
   return (
     <>
@@ -228,6 +298,74 @@ export const ProofModal: React.FC = () => {
 
           {/* Body */}
           <div className="p-6 space-y-5 overflow-y-auto flex-1">
+            {/* Step-by-Step Traceability Timeline */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <span>Traceability Timeline</span>
+              </h4>
+
+              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-track)] divide-y divide-[var(--border-subtle)]">
+                {timeline.map((entry) => {
+                  const meta = STAGE_META[entry.stage] || {
+                    label: entry.stage,
+                    dot: 'bg-slate-500',
+                  };
+                  const formattedAmount =
+                    entry.amount !== undefined
+                      ? entry.currency === 'MAD'
+                        ? formatMAD(entry.amount)
+                        : formatUSD(entry.amount)
+                      : '—';
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="px-3.5 py-2.5 flex items-start justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span
+                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${meta.dot}`}
+                        />
+                        <div className="min-w-0">
+                          <div className="font-semibold text-[var(--text-primary)] flex items-center gap-2 flex-wrap">
+                            <span>{meta.label}</span>
+                            {entry.recipient && (
+                              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                                &rarr; {entry.recipient}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-2 flex-wrap mt-0.5 font-mono tabular-nums">
+                            <span>{formatDate(entry.date)}</span>
+                            {entry.fee !== undefined && entry.fee > 0 && (
+                              <span className="text-rose-600 dark:text-rose-400">
+                                Fee -{formatUSD(entry.fee)}
+                              </span>
+                            )}
+                            {entry.rate !== undefined && entry.rate > 0 && (
+                              <span className="text-teal-700 dark:text-teal-400">
+                                @{entry.rate} MAD/USD
+                              </span>
+                            )}
+                            {entry.txId && (
+                              <span className="text-[var(--text-secondary)] bg-[var(--bg-surface)] px-1.5 py-0.2 rounded border border-[var(--border-subtle)]">
+                                {entry.txId}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className="font-mono tabular-nums font-bold text-[var(--text-primary)] shrink-0">
+                        {formattedAmount}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Upload / Drag & Drop / Paste Zone */}
             <div
               onDragOver={(e) => {
@@ -243,7 +381,7 @@ export const ProofModal: React.FC = () => {
                 }
               }}
               onClick={() => fileInputRef.current?.click()}
-              className={`relative border border-dashed rounded-xl p-6 text-center transition-all cursor-pointer ${
+              className={`relative border border-dashed rounded-xl p-5 text-center transition-all cursor-pointer ${
                 isDragging
                   ? 'border-teal-600 bg-teal-50/50 dark:bg-teal-950/30'
                   : 'border-[var(--border-strong)] hover:border-[var(--text-secondary)] bg-[var(--bg-track)]'
@@ -277,7 +415,7 @@ export const ProofModal: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-[var(--text-primary)]">
-                      Click to upload, drag &amp; drop, or paste receipt
+                      Click to upload, drag &amp; drop, or paste receipt ({stageLabel})
                     </p>
                     <p className="text-[11px] text-[var(--text-muted)] mt-1 flex items-center justify-center gap-1.5">
                       <ClipboardPaste className="w-3 h-3" />
@@ -337,6 +475,12 @@ export const ProofModal: React.FC = () => {
                           className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-200"
                         />
                       </button>
+
+                      {img.stage && (
+                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-black/70 text-white">
+                          {STAGE_SHORT[img.stage] || img.stage}
+                        </span>
+                      )}
 
                       <div className="absolute top-1.5 right-1.5 flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button

@@ -72,6 +72,7 @@ export function subscribeToTransactions(onUpdate: (transactions: Transaction[]) 
           payoutMethod: data.payoutMethod || '',
           payoutHistory: Array.isArray(data.payoutHistory) ? data.payoutHistory : [],
           proofImages: Array.isArray(data.proofImages) ? data.proofImages : [],
+          stageHistory: Array.isArray(data.stageHistory) ? data.stageHistory : [],
           isSplit: Boolean(data.isSplit),
           originReference: data.originReference || '',
           originalCihAmount: data.originalCihAmount !== null && data.originalCihAmount !== undefined ? Number(data.originalCihAmount) : undefined,

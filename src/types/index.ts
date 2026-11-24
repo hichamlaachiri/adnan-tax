@@ -22,7 +22,22 @@ export interface ProofImage {
   id: string;
   dataUrl: string;
   name?: string;
+  stage?: PipelineStatus;
   uploadedAt: number;
+}
+
+export interface StageHistoryEntry {
+  id: string;
+  stage: PipelineStatus;
+  timestamp: number;
+  date: string;
+  amount?: number;
+  currency?: 'USD' | 'USDT' | 'MAD' | 'EUR';
+  fee?: number;
+  rate?: number;
+  txId?: string;
+  recipient?: string;
+  notes?: string;
 }
 
 export interface Transaction {
@@ -73,6 +88,7 @@ export interface Transaction {
   status: PipelineStatus;
   notes?: string;
   proofImages?: ProofImage[];
+  stageHistory?: StageHistoryEntry[];
   createdAt: number;
   updatedAt: number;
 }

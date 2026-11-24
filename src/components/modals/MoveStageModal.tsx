@@ -13,10 +13,12 @@ export const MoveStageModal: React.FC = () => {
   // Step 2: Binance
   const [binanceAmount, setBinanceAmount] = useState<string>('');
   const [binanceFee, setBinanceFee] = useState<string>('');
+  const [binanceTxId, setBinanceTxId] = useState<string>('');
 
   // Step 3: CIH
   const [exchangeRate, setExchangeRate] = useState<string>('9.90');
   const [cihAmount, setCihAmount] = useState<string>('');
+  const [cihTxId, setCihTxId] = useState<string>('');
   const [eurRate, setEurRate] = useState<string>(lastEurRate?.toString() || '10.85');
   const [eurAmount, setEurAmount] = useState<string>('');
 
@@ -37,6 +39,7 @@ export const MoveStageModal: React.FC = () => {
         const defaultNet = Number((baseUSD - defaultFee).toFixed(2));
         setBinanceFee(tx.binanceFee?.toString() || defaultFee.toString());
         setBinanceAmount(tx.binanceAmount?.toString() || defaultNet.toString());
+        setBinanceTxId(tx.binanceTxId || '');
       } else if (targetStage === 'settled_cih') {
         const netUSD = tx.binanceAmount || baseUSD;
         const rate = tx.exchangeRate || 9.9;
@@ -44,6 +47,7 @@ export const MoveStageModal: React.FC = () => {
         const cAmt = tx.cihAmount ? tx.cihAmount : Number((netUSD * rate).toFixed(2));
         setExchangeRate(rate.toString());
         setCihAmount(cAmt.toString());
+        setCihTxId(tx.cihTxId || '');
         setEurRate(eRate.toString());
         setEurAmount((cAmt / eRate).toFixed(2));
       } else if (targetStage === 'final_payout') {
@@ -132,6 +136,7 @@ export const MoveStageModal: React.FC = () => {
       await moveTransactionStage(tx.id, 'in_binance', {
         binanceAmount: net,
         binanceFee: fee,
+        binanceTxId: binanceTxId.trim() || undefined,
       });
     } else if (targetStage === 'settled_cih') {
       const cihA = parseFloat(cihAmount) || undefined;
@@ -140,6 +145,7 @@ export const MoveStageModal: React.FC = () => {
       await moveTransactionStage(tx.id, 'settled_cih', {
         cihAmount: cihA,
         exchangeRate: parseFloat(exchangeRate) || 9.9,
+        cihTxId: cihTxId.trim() || undefined,
         eurRate: eR,
         eurAmount: eurA,
       });
@@ -244,6 +250,19 @@ export const MoveStageModal: React.FC = () => {
                   className="w-full px-3.5 py-2 text-sm font-mono tabular-nums font-semibold text-rose-600 dark:text-rose-400 bg-[var(--bg-track)] border border-[var(--border-subtle)] rounded-xl focus:outline-none focus:border-[var(--border-strong)] focus:bg-[var(--bg-surface)] transition-colors"
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
+                  Binance Tx ID / Order Ref <span className="font-normal text-[var(--text-muted)]">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={binanceTxId}
+                  onChange={(e) => setBinanceTxId(e.target.value)}
+                  placeholder="e.g. TX-982341 / Order #..."
+                  className="w-full px-3 py-2 text-xs font-mono bg-[var(--bg-track)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-xl focus:outline-none focus:border-[var(--border-strong)] focus:bg-[var(--bg-surface)] transition-colors"
+                />
+              </div>
             </div>
           )}
 
@@ -292,6 +311,19 @@ export const MoveStageModal: React.FC = () => {
                   className="w-full px-3.5 py-2.5 text-base font-mono tabular-nums font-bold text-teal-700 dark:text-teal-400 bg-[var(--bg-track)] border border-[var(--border-subtle)] rounded-xl focus:outline-none focus:border-teal-600 focus:bg-[var(--bg-surface)]"
                   required
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
+                  CIH Transfer Ref / P2P Order <span className="font-normal text-[var(--text-muted)]">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={cihTxId}
+                  onChange={(e) => setCihTxId(e.target.value)}
+                  placeholder="e.g. P2P-44102 / Virement #..."
+                  className="w-full px-3 py-2 text-xs font-mono bg-[var(--bg-track)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-xl focus:outline-none focus:border-[var(--border-strong)] focus:bg-[var(--bg-surface)] transition-colors"
                 />
               </div>
 
